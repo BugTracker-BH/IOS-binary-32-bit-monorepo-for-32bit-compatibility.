@@ -717,6 +717,17 @@ impl Window {
                     }
                 }
                 E::AppWillEnterBackground { .. } => {
+                    if env::consts::OS == "ios" {
+                        // iOS fires a spurious applicationWillResignActive during
+                        // the launch presentation (the SDL view-controller
+                        // appearance-transition churn). Treating it as a quit (as
+                        // below) kills the app at startup before anything renders.
+                        // Ignore background transitions on iOS for now so the app
+                        // stays alive and keeps rendering.
+                        // TODO: properly pause/resume audio and state instead.
+                        log!("Ignoring app-will-enter-background event on iOS.");
+                        continue;
+                    }
                     log!("Received app-will-resign-active event.");
                     assert!(self.high_priority_event.is_none());
                     self.high_priority_event = Some(Event::AppWillResignActive);
