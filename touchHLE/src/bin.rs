@@ -16,15 +16,36 @@ fn main() -> Result<(), String> {
 // runs UIApplicationMain and installs SDL's UIApplicationDelegate / UIWindow /
 // CAEAGLLayer and the iOS run loop, *then* invokes the supplied main function
 // (here a trampoline into the Rust core) on the main thread once launch has
-// finished. Without it, calling SDL_Init(VIDEO) / creating a window from a
-// plain main() touches the UIKit video backend with no UIApplication and the
-// process is killed at launch before any UI appears. SDL_UIKitRunApp is part
-// of libSDL2 itself (not libSDL2main), so it is available with our static SDL
-// build even though SDL was built with SDL_MAIN_HANDLED.
+// finished. SDL_UIKitRunApp is part of libSDL2 itself (not libSDL2main), so it
+// is available with our static SDL build even though SDL was built with
+// SDL_MAIN_HANDLED.
 #[cfg(target_os = "ios")]
 fn main() {
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_int};
+
+    // A SpringBoard launch has no attached console, so redirect stdout+stderr to
+    // a file we can read over SSH afterwards. The app has the no-container
+    // entitlement, so /var/mobile is writable. stderr is unbuffered in Rust, so
+    // breadcrumbs / panics / the trampoline's error print land immediately even
+    // if the process is killed.
+    unsafe {
+        if let Ok(path) = CString::new("/var/mobile/touchHLE-ios.log") {
+            let fd = libc::open(
+                path.as_ptr(),
+                libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC,
+                0o644,
+            );
+            if fd >= 0 {
+                libc::dup2(fd, 1);
+                libc::dup2(fd, 2);
+                if fd > 2 {
+                    libc::close(fd);
+                }
+            }
+        }
+    }
+    eprintln!("[ios] main() reached; log redirected; about to call SDL_UIKitRunApp");
 
     extern "C" {
         fn SDL_SetMainReady();
@@ -37,6 +58,7 @@ fn main() {
 
     // Called by SDL on the main thread after the iOS app has finished launching.
     extern "C" fn touchhle_ios_trampoline(argc: c_int, argv: *mut *mut c_char) -> c_int {
+        eprintln!("[ios] trampoline entered (argc={argc}); calling touchHLE::main");
         let args: Vec<String> = (0..argc as isize)
             .map(|i| unsafe {
                 CStr::from_ptr(*argv.offset(i))
@@ -44,18 +66,22 @@ fn main() {
                     .into_owned()
             })
             .collect();
-        match touchHLE::main(args.into_iter()) {
-            Ok(()) => 0,
+        let result = touchHLE::main(args.into_iter());
+        match result {
+            Ok(()) => {
+                eprintln!("[ios] touchHLE::main returned Ok");
+                0
+            }
             Err(e) => {
-                eprintln!("touchHLE exited with error: {}", e);
+                eprintln!("[ios] touchHLE::main returned Err: {e}");
                 1
             }
         }
     }
 
-    // Build a NUL-terminated C argv from the process arguments, guaranteeing at
-    // least argv[0] (touchHLE::main skips argv[0]). SDL_UIKitRunApp copies these
-    // before UIApplicationMain, so `owned` only needs to outlive the call.
+    // Build a NUL-terminated C argv, guaranteeing argv[0] (touchHLE::main skips
+    // it). SDL_UIKitRunApp copies these before UIApplicationMain, so `owned`
+    // only needs to outlive the call.
     let mut owned: Vec<CString> = std::env::args()
         .filter_map(|a| CString::new(a).ok())
         .collect();
@@ -66,11 +92,12 @@ fn main() {
     argv.push(std::ptr::null_mut());
     let argc = owned.len() as c_int;
 
-    // SDL was built with SDL_MAIN_HANDLED, so mark main as ready ourselves to
-    // avoid SDL_Init failing with "Application not initialized properly".
+    // SDL was built with SDL_MAIN_HANDLED, so mark main ready ourselves to avoid
+    // SDL_Init failing with "Application not initialized properly".
     // SDL_UIKitRunApp calls UIApplicationMain, which does not return.
     unsafe {
         SDL_SetMainReady();
         SDL_UIKitRunApp(argc, argv.as_mut_ptr(), touchhle_ios_trampoline);
     }
+    eprintln!("[ios] SDL_UIKitRunApp returned (unexpected)");
 }
