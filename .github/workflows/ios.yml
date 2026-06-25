@@ -45,7 +45,14 @@ jobs:
           git -C vendor/dynarmic submodule update --init --recursive --depth 1
 
       - name: Install Boost (dynarmic dependency)
-        run: brew install boost
+        run: |
+          brew install boost
+          # Under iOS cross-compile, CMake's FindBoost can't see Homebrew's host
+          # prefix. touchHLE's dynarmic_wrapper/build.rs sets -DBoost_INCLUDE_DIR
+          # from vendor/boost when present, which bypasses that. Point it at the
+          # Homebrew headers (dynarmic only needs Boost headers).
+          ln -sfn "$(brew --prefix boost)/include" vendor/boost
+          ls -la vendor/boost/boost/version.hpp
 
       - name: Add Rust iOS target
         run: |
@@ -59,11 +66,6 @@ jobs:
           set -euo pipefail
           SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
           echo "Using SDK=$SDK_PATH"
-
-          # The pinned `cmake` crate (0.1.49) emits CMAKE_OSX_SYSROOT=/ for iOS,
-          # which CMake's iOS-Initialize.cmake rejects. Force the real SDK via a
-          # toolchain file: a FORCE cache set overrides that bad -D at the cache
-          # level, which env vars alone do not reliably do.
           cat > "$RUNNER_TEMP/ios-toolchain.cmake" <<EOF
           set(CMAKE_SYSTEM_NAME iOS)
           set(CMAKE_OSX_SYSROOT "$SDK_PATH" CACHE STRING "iOS SDK" FORCE)
@@ -71,15 +73,10 @@ jobs:
           set(CMAKE_OSX_DEPLOYMENT_TARGET "$IPHONEOS_DEPLOYMENT_TARGET" CACHE STRING "" FORCE)
           EOF
           echo "--- toolchain file ---"; cat "$RUNNER_TEMP/ios-toolchain.cmake"
-
-          # Underscore-form env (safe to export) + SDKROOT for the compiler driver.
           export SDKROOT="$SDK_PATH"
           export CMAKE_OSX_SYSROOT="$SDK_PATH"
           export CMAKE_OSX_SYSROOT_aarch64_apple_ios="$SDK_PATH"
           export CMAKE_TOOLCHAIN_FILE_aarch64_apple_ios="$RUNNER_TEMP/ios-toolchain.cmake"
-
-          # Hyphen-form vars can't be exported (invalid identifier), so pass them
-          # inline to the build process via `env`.
           env "CMAKE_OSX_SYSROOT_aarch64-apple-ios=$SDK_PATH" \
               "CMAKE_TOOLCHAIN_FILE_aarch64-apple-ios=$RUNNER_TEMP/ios-toolchain.cmake" \
               cargo build --release --target aarch64-apple-ios --lib 2>&1 | tee build-ios.log
