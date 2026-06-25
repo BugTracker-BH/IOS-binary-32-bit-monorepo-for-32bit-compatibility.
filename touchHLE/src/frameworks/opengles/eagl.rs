@@ -277,19 +277,7 @@ pub const CLASSES: ClassExports = objc_classes! {
             .count_frame(format_args!("EAGLContext {this:?}"));
     }
 
-    // The fullscreen "fast path" presents the guest app's renderbuffer directly
-    // from the guest GL context. On iOS that context's frames never reach the
-    // visible SDL view (only touchHLE's internal context is bound to the
-    // on-screen CAEAGLLayer), so the screen stays black even though everything
-    // renders. Force the compositor path on iOS by pretending there's no
-    // fullscreen layer: that routes presentation through present_pixels() ->
-    // the CoreAnimation compositor, which presents via the internal context
-    // (the one that actually reaches the screen). Slower, but visible.
-    let fullscreen_layer = if cfg!(target_os = "ios") {
-        nil
-    } else {
-        find_fullscreen_eagl_layer(env)
-    };
+    let fullscreen_layer = find_fullscreen_eagl_layer(env);
 
     // Unclear from documentation if this method requires the context to be
     // current, but it would be weird if it didn't?

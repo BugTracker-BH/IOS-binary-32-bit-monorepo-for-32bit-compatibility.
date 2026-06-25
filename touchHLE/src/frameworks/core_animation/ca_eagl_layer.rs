@@ -46,7 +46,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 /// and present it directly from the app's context. This function is used to
 /// determine when that will happen.
 pub fn find_fullscreen_eagl_layer(env: &mut Environment) -> id {
-    if env.options.force_composition {
+    // On iOS, the CAEAGLLayer "fast path" presents the guest app's renderbuffer
+    // directly from the guest GL context, whose frames never reach the visible
+    // SDL view (only touchHLE's internal context is bound to the on-screen
+    // layer). Force composition so frames go through touchHLE's compositor,
+    // which presents via the internal context and actually reaches the screen.
+    // This must be decided here, at the single source, so that both callers
+    // (presentRenderbuffer: and recomposite_if_necessary) agree.
+    if env.options.force_composition || cfg!(target_os = "ios") {
         return nil;
     }
 
