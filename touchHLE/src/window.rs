@@ -423,18 +423,81 @@ impl Window {
             // left bound now, while none of our own framebuffers are bound, so
             // the compositor can present into the real screen framebuffer rather
             // than 0 (which renders to nothing on iOS). On desktop this is 0.
+            use crate::gles::gles11_raw as gldiag;
             let mut fbo: i32 = 0;
+            let mut rbo: i32 = 0;
+            let mut vp = [0i32; 4];
+            let mut rb_w: i32 = -1;
+            let mut rb_h: i32 = -1;
+            let fb_status;
+            let gl_err;
             unsafe {
-                gl_ctx.GetIntegerv(crate::gles::gles11_raw::FRAMEBUFFER_BINDING_OES, &mut fbo);
+                gl_ctx.GetIntegerv(gldiag::FRAMEBUFFER_BINDING_OES, &mut fbo);
+                gl_ctx.GetIntegerv(gldiag::RENDERBUFFER_BINDING_OES, &mut rbo);
+                gl_ctx.GetIntegerv(gldiag::VIEWPORT, vp.as_mut_ptr());
+                fb_status = gl_ctx.CheckFramebufferStatusOES(gldiag::FRAMEBUFFER_OES);
+                gl_ctx.GetRenderbufferParameterivOES(
+                    gldiag::RENDERBUFFER_OES,
+                    gldiag::RENDERBUFFER_WIDTH_OES,
+                    &mut rb_w,
+                );
+                gl_ctx.GetRenderbufferParameterivOES(
+                    gldiag::RENDERBUFFER_OES,
+                    gldiag::RENDERBUFFER_HEIGHT_OES,
+                    &mut rb_h,
+                );
+                gl_err = gl_ctx.GetError();
             }
+            log!(
+                "[diag] GL state: screen_fbo={} bound_rbo={} fb_status=0x{:x} (complete=0x{:x}) screen_rbo_size={}x{} viewport={:?} gl_err=0x{:x}",
+                fbo, rbo, fb_status, gldiag::FRAMEBUFFER_COMPLETE_OES, rb_w, rb_h, vp, gl_err
+            );
             fbo.max(0) as u32
         };
         window.gl_default_framebuffer = screen_fbo;
-        log!("Default (screen) framebuffer: {}", screen_fbo);
         window.internal_gl_ins = Some(gl_ins);
+
+        // === iOS display diagnostics: SDL window / view state at creation ===
+        {
+            let flags = window.window.window_flags();
+            let (sw, sh) = window.window.size();
+            let (dw, dh) = window.window.drawable_size();
+            let (px, py) = window.window.position();
+            log!(
+                "[diag] SDL window: flags=0x{:08x} SHOWN={} HIDDEN={} MINIMIZED={} FULLSCREEN={} OPENGL={} METAL={} HIGHDPI={}",
+                flags,
+                flags & 0x0000_0004 != 0,
+                flags & 0x0000_0008 != 0,
+                flags & 0x0000_0040 != 0,
+                flags & 0x0000_0001 != 0,
+                flags & 0x0000_0002 != 0,
+                flags & 0x2000_0000 != 0,
+                flags & 0x0000_2000 != 0,
+            );
+            log!(
+                "[diag] SDL window: logical_size={}x{} drawable={}x{} position=({},{}) default_fb={}",
+                sw, sh, dw, dh, px, py, screen_fbo
+            );
+        }
 
         if window.splash_image.is_some() {
             window.display_splash();
+        }
+
+        // On iOS, touchHLE's main runs synchronously from the SDL app delegate's
+        // postFinishLaunch and immediately enters a busy render loop, so UIKit
+        // never gets a turn to finish presenting/laying out SDL's GL view
+        // (SDL_uikitviewcontroller). The result is that the CAEAGLLayer is never
+        // composited and the screen shows only the window's bare background.
+        // Pump the iOS run loop for a few frames here so the view controller's
+        // appearance transition completes and the layer is laid out before we
+        // start rendering.
+        #[cfg(target_os = "ios")]
+        {
+            for _ in 0..15 {
+                window.event_pump.pump_events();
+                std::thread::sleep(Duration::from_millis(16));
+            }
         }
 
         window
@@ -1299,7 +1362,26 @@ impl Window {
     /// Swap front-buffer and back-buffer so the result of OpenGL rendering is
     /// presented.
     pub fn swap_window(&self) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static PRESENT_COUNT: AtomicU64 = AtomicU64::new(0);
+        let n = PRESENT_COUNT.fetch_add(1, Ordering::Relaxed);
         self.window.gl_swap_window();
+        // Heartbeat: proves the present loop is actually running each frame, and
+        // reports whether the window is shown with a non-zero drawable (i.e.
+        // whether SDL's view is laid out). Rate-limited to avoid log spam.
+        if n < 5 || n % 600 == 0 {
+            let (dw, dh) = self.window.drawable_size();
+            let flags = self.window.window_flags();
+            log!(
+                "[diag] present #{}: drawable={}x{} SHOWN={} MINIMIZED={} sdl_err={:?}",
+                n,
+                dw,
+                dh,
+                flags & 0x0000_0004 != 0,
+                flags & 0x0000_0040 != 0,
+                sdl2::get_error()
+            );
+        }
     }
 
     /// The framebuffer object that represents the visible screen. This is 0 (the
