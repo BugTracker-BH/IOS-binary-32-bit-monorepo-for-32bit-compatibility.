@@ -1,17 +1,14 @@
 name: iOS build (touchHLE)
-
 on:
   workflow_dispatch:
   push:
     paths:
       - "touchHLE/**"
       - ".github/workflows/ios.yml"
-
 env:
   CARGO_TERM_COLOR: always
   IPHONEOS_DEPLOYMENT_TARGET: "14.0"
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-
 jobs:
   ios-app:
     runs-on: macos-15
@@ -21,7 +18,6 @@ jobs:
     steps:
       - name: Checkout monorepo
         uses: actions/checkout@v4
-
       - name: Fetch vendor dependencies
         run: |
           git config --global advice.detachedHead false
@@ -38,12 +34,11 @@ jobs:
             done
             echo "FAILED to fetch $2"; return 1
           }
-          fetch_dep vendor/SDL         https://github.com/libsdl-org/SDL.git    07d0f51fa292895443f563f0cbde4cb3802d87fa
-          fetch_dep vendor/dynarmic    https://github.com/touchHLE/dynarmic.git HEAD
-          fetch_dep vendor/openal-soft https://github.com/kcat/openal-soft      HEAD
-          fetch_dep vendor/stb         https://github.com/nothings/stb.git      dev
+          fetch_dep vendor/SDL https://github.com/libsdl-org/SDL.git 07d0f51fa292895443f563f0cbde4cb3802d87fa
+          fetch_dep vendor/dynarmic https://github.com/touchHLE/dynarmic.git HEAD
+          fetch_dep vendor/openal-soft https://github.com/kcat/openal-soft HEAD
+          fetch_dep vendor/stb https://github.com/nothings/stb.git dev
           git -C vendor/dynarmic submodule update --init --recursive --depth 1
-
       - name: Restore embedded data files
         run: |
           mkdir -p touchHLE_apps res vendor/PVRTDecompress
@@ -55,15 +50,12 @@ jobs:
           for p in res/icon.png res/icon_unofficial.png res/icon_preview.png; do
             [ -f "$p" ] || printf '%s' "$PNG_B64" | openssl base64 -A -d > "$p"
           done
-
       - name: Install Boost
         run: |
           brew install boost
           ln -sfn "$(brew --prefix boost)/include" vendor/boost
-
       - name: Add Rust iOS target
         run: rustup target add aarch64-apple-ios
-
       - name: Build touchHLE executable (aarch64-apple-ios)
         run: |
           set -euo pipefail
@@ -85,7 +77,6 @@ jobs:
           env "CMAKE_OSX_SYSROOT_aarch64-apple-ios=$SDK_PATH" \
               "CMAKE_TOOLCHAIN_FILE_aarch64-apple-ios=$RUNNER_TEMP/ios-toolchain.cmake" \
               cargo build --release --target aarch64-apple-ios --bin touchHLE 2>&1 | tee build-ios.log
-
       - name: Package signed iOS app (.ipa + rootless .deb)
         run: |
           set -euo pipefail
@@ -97,18 +88,16 @@ jobs:
           mkdir -p "$APP"
           cp "$BIN" "$APP/touchHLE"; chmod +x "$APP/touchHLE"
           cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
-          cp -r touchHLE_fonts  "$APP/touchHLE_fonts"
-          cp    touchHLE_default_options.txt "$APP/touchHLE_default_options.txt" || true
+          cp -r touchHLE_fonts "$APP/touchHLE_fonts"
+          cp touchHLE_default_options.txt "$APP/touchHLE_default_options.txt" || true
           GAME_IPA="$GITHUB_WORKSPACE/JellyCar 1.0 (Decrypted).ipa"
           if [ -f "$GAME_IPA" ]; then
             ( cd "$RUNNER_TEMP" && rm -rf jc && mkdir jc && cd jc && unzip -oq "$GAME_IPA" )
             mkdir -p "$APP/touchHLE_apps"
             cp -r "$RUNNER_TEMP"/jc/Payload/*.app "$APP/touchHLE_apps/" || true
           fi
-
           # ---- Info.plist (printf line-by-line; no base64 to corrupt) ----
-          {
-            printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+          { printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
             printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
             printf '%s\n' '<plist version="1.0"><dict>'
             printf '%s\n' '<key>CFBundleName</key><string>touchHLE</string>'
@@ -127,31 +116,23 @@ jobs:
             printf '%s\n' '</dict></plist>'
           } > "$APP/Info.plist"
           echo "--- Info.plist ---"; cat "$APP/Info.plist"; plutil -lint "$APP/Info.plist" || true
-
-          # ---- entitlements (printf line-by-line) ----
-          {
-            printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+          # ---- entitlements (minimal TrollStore set: JIT only, no platform/no-container) ----
+          { printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
             printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
             printf '%s\n' '<plist version="1.0"><dict>'
-            printf '%s\n' '<key>platform-application</key><true/>'
-            printf '%s\n' '<key>com.apple.private.security.no-container</key><true/>'
             printf '%s\n' '<key>get-task-allow</key><true/>'
             printf '%s\n' '<key>dynamic-codesigning</key><true/>'
-            printf '%s\n' '<key>com.apple.private.amfi.can-execute-cdhash</key><true/>'
             printf '%s\n' '</dict></plist>'
           } > "$RUNNER_TEMP/ent.plist"
           plutil -lint "$RUNNER_TEMP/ent.plist" || true
-
           ldid -S"$RUNNER_TEMP/ent.plist" "$APP/touchHLE"
           ( cd "$RUNNER_TEMP" && zip -qr9 "$GITHUB_WORKSPACE/touchHLE/touchHLE.ipa" Payload )
-
           DEB="$RUNNER_TEMP/deb"
           mkdir -p "$DEB/var/jb/Applications" "$DEB/DEBIAN"
           cp -r "$APP" "$DEB/var/jb/Applications/touchHLE.app"
           printf 'Package: org.touchhle.ios\nName: touchHLE\nVersion: 0.2.3\nArchitecture: iphoneos-arm64\nDescription: HLE emulator for 32-bit iPhone OS apps (JellyCar)\nMaintainer: BugTracker-BH\nSection: Games\n' > "$DEB/DEBIAN/control"
           dpkg-deb -Zgzip -b "$DEB" touchHLE_rootless.deb
           ls -la touchHLE.ipa touchHLE_rootless.deb
-
       - name: Upload iOS app + build log
         if: always()
         uses: actions/upload-artifact@v4
