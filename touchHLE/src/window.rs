@@ -272,13 +272,17 @@ impl Window {
         // remove this (https://github.com/touchHLE/touchHLE/issues/85).
         sdl2::hint::set("SDL_JOYSTICK_HIDAPI", "0");
 
-        if env::consts::OS == "android" {
+        if env::consts::OS == "android" || env::consts::OS == "ios" {
             // It's important to set context version BEFORE window creation
             // ref. https://wiki.libsdl.org/SDL2/SDL_GLattr
+            // Mobile platforms (Android, iOS) provide OpenGL ES only; touchHLE's
+            // host renderer targets GLES 1.1.
             let attr = video_ctx.gl_attr();
             attr.set_context_version(1, 1);
             attr.set_context_profile(sdl2::video::GLProfile::GLES);
+        }
 
+        if env::consts::OS == "android" {
             // Disable blocking of event loop when app is paused.
             sdl2::hint::set("SDL_ANDROID_BLOCK_ON_PAUSE", "0");
         }

@@ -51,6 +51,24 @@ fn get_macos_bundled_resources_path() -> Option<PathBuf> {
     }
 }
 
+/// Path to the directory containing touchHLE's read-only bundled resources
+/// (`touchHLE_dylibs`, `touchHLE_fonts`, `touchHLE_default_options.txt`, etc.)
+/// when running from an app bundle. Returns [None] when not in a bundle, in
+/// which case the resources are expected in the current working directory.
+#[allow(dead_code)]
+fn bundled_resources_base_path() -> Option<PathBuf> {
+    #[cfg(target_os = "ios")]
+    {
+        // On iOS everything ships inside the read-only .app bundle, whose
+        // resource directory is SDL's "base path". The working directory is "/".
+        return sdl2::filesystem::base_path().ok().map(PathBuf::from);
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        get_macos_bundled_resources_path()
+    }
+}
+
 /// Abstraction over a platform-specific type for accessing a resource bundled
 /// with touchHLE.
 pub struct ResourceFile {
@@ -70,7 +88,7 @@ impl ResourceFile {
             // On other OSes, resources are accessed as ordinary files.
             #[cfg(not(target_os = "android"))]
             file: {
-                let base_path = get_macos_bundled_resources_path();
+                let base_path = bundled_resources_base_path();
                 // When not in a bundle, look in the current directory.
                 let path = base_path.as_deref().unwrap_or(Path::new(".")).join(path);
                 std::fs::File::open(path).map_err(|e| e.to_string())?
@@ -134,7 +152,7 @@ pub fn user_data_base_path() -> Cow<'static, Path> {
         }
         Cow::from(Path::new(std::ffi::CStr::from_ptr(path).to_str().unwrap()))
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         // When touchHLE is run from a .app bundle on macOS, the user might not
         // be able to control the current directory, so user data needs to go in
@@ -145,6 +163,15 @@ pub fn user_data_base_path() -> Cow<'static, Path> {
             ));
         }
         Cow::from(Path::new("."))
+    }
+    // On iOS the app bundle is read-only and the working directory is "/", so
+    // writable user data (the log file, per-app sandbox, user options) must live
+    // in the app's writable prefs directory.
+    #[cfg(target_os = "ios")]
+    {
+        Cow::from(PathBuf::from(
+            sdl2::filesystem::pref_path("touchhle.org", "touchHLE").unwrap(),
+        ))
     }
 }
 
@@ -182,6 +209,28 @@ pub fn url_for_opening_user_data_dir() -> Result<String, String> {
 /// doesn't exist, and populate it with templates or README files. (On other
 /// platforms these are simply bundled with touchHLE in a ZIP file.)
 pub fn prepopulate_user_data_dir() {
+    // On iOS the bundled apps (e.g. the bundled JellyCar) live in the read-only
+    // .app bundle, but the app picker scans the writable user data dir. Bridge
+    // them by symlinking each bundled app into the writable apps dir.
+    #[cfg(target_os = "ios")]
+    {
+        let user_apps = user_data_base_path().join(APPS_DIR);
+        let _ = std::fs::create_dir_all(&user_apps);
+        if let Some(bundle) = bundled_resources_base_path() {
+            if let Ok(entries) = std::fs::read_dir(bundle.join(APPS_DIR)) {
+                for entry in entries.flatten() {
+                    let dst = user_apps.join(entry.file_name());
+                    if !dst.exists() {
+                        match std::os::unix::fs::symlink(entry.path(), &dst) {
+                            Ok(()) => log!("Linked bundled app: {}", dst.display()),
+                            Err(e) => log!("Couldn't link {}: {}", dst.display(), e),
+                        }
+                    }
+                }
+            }
+        }
+        return;
+    }
     if std::env::consts::OS != "android" && std::env::consts::OS != "macos" {
         return;
     }
