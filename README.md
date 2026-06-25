@@ -1,0 +1,1 @@
+# IOS-binary-32-bit-monorepo-for-32bit-compatibility.
