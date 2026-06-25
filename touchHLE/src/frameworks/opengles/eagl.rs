@@ -552,6 +552,10 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     let viewport = env.window.as_mut().unwrap().viewport();
     let rotation_matrix = env.window.as_mut().unwrap().rotation_matrix();
     let virtual_cursor_visible_at = env.window.as_mut().unwrap().virtual_cursor_visible_at();
+    // Framebuffer representing the visible screen (0 on desktop, a non-zero SDL
+    // FBO on iOS). Capture before borrowing the GL context below. Valid in the
+    // guest context because guest contexts share SDL's sharegroup.
+    let screen_framebuffer = env.window.as_mut().unwrap().gl_default_framebuffer();
 
     let gles_ctx = super::get_thread_context(
         &mut env.framework_state.opengles,
@@ -678,7 +682,10 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         tex_env_mode_arr.as_ptr().cast(),
     );
 
-    // Draw the quad
+    // Draw the quad to the screen framebuffer. The DeleteFramebuffersOES above
+    // reset the binding to 0 (correct on desktop), but on iOS the screen is a
+    // non-zero SDL FBO, so bind it explicitly.
+    gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, screen_framebuffer);
     present_frame(gles, viewport, rotation_matrix, virtual_cursor_visible_at);
 
     // Clean up the texture

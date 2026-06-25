@@ -341,6 +341,9 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
 
     // Re-borrow
     let window = env.window.as_mut().unwrap();
+    // The framebuffer representing the visible screen (0 on desktop, a non-zero
+    // SDL FBO on iOS). Capture before borrowing the GL context.
+    let screen_framebuffer = window.gl_default_framebuffer();
     let mut gles = window.make_internal_gl_ctx_current();
 
     // Clean up some GL state
@@ -358,10 +361,11 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     }
 
     // Present our rendered frame (bound to TEXTURE_2D). This copies it to the
-    // default framebuffer (0) so we need to unbind our internal framebuffer.
+    // screen framebuffer (0 on desktop, SDL's CAEAGLLayer FBO on iOS) so we need
+    // to unbind our internal framebuffer.
     unsafe {
         gles.BindTexture(gles11::TEXTURE_2D, texture);
-        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, 0);
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, screen_framebuffer);
         present_frame(
             gles.as_mut(),
             present_frame_args.0,

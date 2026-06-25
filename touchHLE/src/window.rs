@@ -230,6 +230,11 @@ pub struct Window {
     fullscreen: bool,
     scale_hack: NonZeroU32,
     internal_gl_ins: Option<Box<dyn GLESContext>>,
+    /// Framebuffer object representing the visible screen. This is 0 (the window
+    /// default framebuffer) on desktop, but on iOS SDL backs the screen with a
+    /// non-zero FBO attached to the CAEAGLLayer, so we capture whatever SDL
+    /// leaves bound at context creation and present into that instead of 0.
+    gl_default_framebuffer: u32,
     splash_image: Option<Image>,
     device_family: DeviceFamily,
     device_orientation: DeviceOrientation,
@@ -383,6 +388,7 @@ impl Window {
             fullscreen,
             scale_hack,
             internal_gl_ins: None,
+            gl_default_framebuffer: 0,
             splash_image: launch_image,
             device_family,
             device_orientation,
@@ -409,10 +415,22 @@ impl Window {
         // because SDL2 won't let us use more than one graphics API in the same
         // window, and we also need OpenGL ES for the app's own rendering.
         let mut gl_ins = create_gles1_ctx_no_parent_stack(&mut window, options);
-        {
-            let gl_ctx = gl_ins.make_current(&mut window);
+        let screen_fbo: u32 = {
+            let mut gl_ctx = gl_ins.make_current(&mut window);
             log!("Driver info: {}", unsafe { gl_ctx.driver_description() });
-        }
+            // On iOS the visible screen is backed by a non-zero framebuffer
+            // (SDL's CAEAGLLayer FBO), not framebuffer 0. Capture whatever SDL
+            // left bound now, while none of our own framebuffers are bound, so
+            // the compositor can present into the real screen framebuffer rather
+            // than 0 (which renders to nothing on iOS). On desktop this is 0.
+            let mut fbo: i32 = 0;
+            unsafe {
+                gl_ctx.GetIntegerv(crate::gles::gles11_raw::FRAMEBUFFER_BINDING_OES, &mut fbo);
+            }
+            fbo.max(0) as u32
+        };
+        window.gl_default_framebuffer = screen_fbo;
+        log!("Default (screen) framebuffer: {}", screen_fbo);
         window.internal_gl_ins = Some(gl_ins);
 
         if window.splash_image.is_some() {
@@ -1282,6 +1300,13 @@ impl Window {
     /// presented.
     pub fn swap_window(&self) {
         self.window.gl_swap_window();
+    }
+
+    /// The framebuffer object that represents the visible screen. This is 0 (the
+    /// window's default framebuffer) on desktop, but a non-zero SDL-created FBO
+    /// on iOS. Present final frames into this rather than hardcoding 0.
+    pub fn gl_default_framebuffer(&self) -> u32 {
+        self.gl_default_framebuffer
     }
 
     /// Consider the emulated device to be rotated to a particular orientation.
