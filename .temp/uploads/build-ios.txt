@@ -1,0 +1,710 @@
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Updating[0m git repository `https://github.com/touchHLE/rust-sdl2`
+[1m[92m    Updating[0m git submodule `https://github.com/libsdl-org/SDL`
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m block-buffer v0.10.4
+[1m[92m  Downloaded[0m clap_lex v0.2.4
+[1m[92m  Downloaded[0m byteorder v1.4.3
+[1m[92m  Downloaded[0m unicode-ident v1.0.5
+[1m[92m  Downloaded[0m windows-link v0.2.0
+[1m[92m  Downloaded[0m version-compare v0.1.1
+[1m[92m  Downloaded[0m unicode-width v0.1.10
+[1m[92m  Downloaded[0m zip v0.6.4
+[1m[92m  Downloaded[0m version_check v0.9.4
+[1m[92m  Downloaded[0m xml-rs v0.8.4
+[1m[92m  Downloaded[0m symphonia-common v0.6.0
+[1m[92m  Downloaded[0m symphonia-format-isomp4 v0.6.0
+[1m[92m  Downloaded[0m symphonia-bundle-mp3 v0.6.0
+[1m[92m  Downloaded[0m regex-lite v0.1.9
+[1m[92m  Downloaded[0m serde_json v1.0.91
+[1m[92m  Downloaded[0m symphonia-core v0.6.0
+[1m[92m  Downloaded[0m owned_ttf_parser v0.15.2
+[1m[92m  Downloaded[0m quick-xml v0.38.4
+[1m[92m  Downloaded[0m syn v1.0.105
+[1m[92m  Downloaded[0m powerfmt v0.2.0
+[1m[92m  Downloaded[0m serde_derive v1.0.228
+[1m[92m  Downloaded[0m csv-core v0.1.10
+[1m[92m  Downloaded[0m syn v2.0.111
+[1m[92m  Downloaded[0m num-complex v0.4.6
+[1m[92m  Downloaded[0m mach_object v0.1.17
+[1m[92m  Downloaded[0m clap v3.2.23
+[1m[92m  Downloaded[0m hashbrown v0.16.1
+[1m[92m  Downloaded[0m serde v1.0.228
+[1m[92m  Downloaded[0m regex-automata v0.1.10
+[1m[92m  Downloaded[0m smallvec v1.15.1
+[1m[92m  Downloaded[0m hashbrown v0.12.3
+[1m[92m  Downloaded[0m digest v0.10.7
+[1m[92m  Downloaded[0m corosensei v0.3.2
+[1m[92m  Downloaded[0m khronos_api v3.1.0
+[1m[92m  Downloaded[0m bitflags v2.11.0
+[1m[92m  Downloaded[0m proc-macro2 v1.0.103
+[1m[92m  Downloaded[0m os_str_bytes v6.4.1
+[1m[92m  Downloaded[0m miniz_oxide v0.6.2
+[1m[92m  Downloaded[0m log v0.4.17
+[1m[92m  Downloaded[0m lazy_static v1.4.0
+[1m[92m  Downloaded[0m flate2 v1.0.25
+[1m[92m  Downloaded[0m cc v1.0.83
+[1m[92m  Downloaded[0m bstr v0.2.17
+[1m[92m  Downloaded[0m serde_core v1.0.228
+[1m[92m  Downloaded[0m memchr v2.5.0
+[1m[92m  Downloaded[0m getrandom v0.2.17
+[1m[92m  Downloaded[0m extended v0.1.0
+[1m[92m  Downloaded[0m deranged v0.5.5
+[1m[92m  Downloaded[0m symphonia-format-caf v0.6.0
+[1m[92m  Downloaded[0m ryu v1.0.12
+[1m[92m  Downloaded[0m rusttype v0.9.3
+[1m[92m  Downloaded[0m csv v1.1.6
+[1m[92m  Downloaded[0m quote v1.0.42
+[1m[92m  Downloaded[0m getopts v0.2.21
+[1m[92m  Downloaded[0m crypto-common v0.1.7
+[1m[92m  Downloaded[0m cargo-platform v0.1.2
+[1m[92m  Downloaded[0m cargo-license v0.5.1
+[1m[92m  Downloaded[0m camino v1.1.2
+[1m[92m  Downloaded[0m bitflags v1.3.2
+[1m[92m  Downloaded[0m base64 v0.22.1
+[1m[92m  Downloaded[0m libc v0.2.180
+[1m[92m  Downloaded[0m symphonia-codec-pcm v0.6.0
+[1m[92m  Downloaded[0m symphonia v0.6.0
+[1m[92m  Downloaded[0m strsim v0.10.0
+[1m[92m  Downloaded[0m sha1 v0.10.6
+[1m[92m  Downloaded[0m semver v1.0.16
+[1m[92m  Downloaded[0m scopeguard v1.2.0
+[1m[92m  Downloaded[0m proc-macro-error-attr v1.0.4
+[1m[92m  Downloaded[0m proc-macro-error v1.0.4
+[1m[92m  Downloaded[0m once_cell v1.17.0
+[1m[92m  Downloaded[0m nibarchive v0.1.0
+[1m[92m  Downloaded[0m equivalent v1.0.2
+[1m[92m  Downloaded[0m gl_generator v0.14.0
+[1m[92m  Downloaded[0m generic-array v0.14.7
+[1m[92m  Downloaded[0m cfg-if v1.0.0
+[1m[92m  Downloaded[0m cargo_metadata v0.15.3
+[1m[92m  Downloaded[0m autocfg v1.1.0
+[1m[92m  Downloaded[0m anyhow v1.0.68
+[1m[92m  Downloaded[0m ansi_term v0.12.1
+[1m[92m  Downloaded[0m adler v1.0.2
+[1m[92m  Downloaded[0m uuid v1.2.2
+[1m[92m  Downloaded[0m encoding_rs v0.8.35
+[1m[92m  Downloaded[0m thiserror-impl v1.0.37
+[1m[92m  Downloaded[0m thiserror v1.0.37
+[1m[92m  Downloaded[0m termcolor v1.2.0
+[1m[92m  Downloaded[0m symphonia-metadata v0.6.0
+[1m[92m  Downloaded[0m symphonia-codec-alac v0.6.0
+[1m[92m  Downloaded[0m symphonia-codec-aac v0.6.0
+[1m[92m  Downloaded[0m itoa v0.4.8
+[1m[92m  Downloaded[0m indexmap v1.9.2
+[1m[92m  Downloaded[0m hound v3.5.0
+[1m[92m  Downloaded[0m cmake v0.1.49
+[1m[92m  Downloaded[0m bytemuck v1.14.3
+[1m[92m  Downloaded[0m atty v0.2.14
+[1m[92m  Downloaded[0m ttf-parser v0.15.2
+[1m[92m  Downloaded[0m time-macros v0.2.24
+[1m[92m  Downloaded[0m textwrap v0.16.0
+[1m[92m  Downloaded[0m symphonia-format-riff v0.6.0
+[1m[92m  Downloaded[0m num-traits v0.2.19
+[1m[92m  Downloaded[0m num-conv v0.1.0
+[1m[92m  Downloaded[0m md-5 v0.10.6
+[1m[92m  Downloaded[0m itoa v1.0.4
+[1m[92m  Downloaded[0m indexmap v2.12.1
+[1m[92m  Downloaded[0m heck v0.4.1
+[1m[92m  Downloaded[0m crc32fast v1.3.2
+[1m[92m  Downloaded[0m cpufeatures v0.2.17
+[1m[92m  Downloaded[0m clap_derive v3.2.18
+[1m[92m  Downloaded[0m typenum v1.19.0
+[1m[92m  Downloaded[0m time-core v0.1.6
+[1m[92m  Downloaded[0m time v0.3.44
+[1m[92m  Downloaded[0m ab_glyph_rasterizer v0.1.8
+[1m[92m  Downloaded[0m toml v0.5.11
+[1m[92m  Downloaded[0m plist v1.8.0
+[1m[92m  Downloaded[0m symphonia-codec-adpcm v0.6.0
+[1m[92m  Downloaded[0m windows-sys v0.61.0
+[1m[92m   Compiling[0m libc v0.2.180
+[1m[92m   Compiling[0m autocfg v1.1.0
+[1m[92m   Compiling[0m proc-macro2 v1.0.103
+[1m[92m   Compiling[0m quote v1.0.42
+[1m[92m   Compiling[0m unicode-ident v1.0.5
+[1m[92m   Compiling[0m log v0.4.17
+[1m[92m   Compiling[0m cfg-if v1.0.0
+[1m[92m   Compiling[0m version_check v0.9.4
+[1m[92m   Compiling[0m cc v1.0.83
+[1m[92m   Compiling[0m serde_core v1.0.228
+[1m[92m   Compiling[0m num-traits v0.2.19
+[1m[92m   Compiling[0m lazy_static v1.4.0
+[1m[92m   Compiling[0m cmake v0.1.49
+[1m[92m   Compiling[0m syn v2.0.111
+[1m[92m   Compiling[0m serde v1.0.228
+[1m[92m   Compiling[0m syn v1.0.105
+[1m[92m   Compiling[0m num-complex v0.4.6
+[1m[92m   Compiling[0m bytemuck v1.14.3
+[1m[92m   Compiling[0m smallvec v1.15.1
+[1m[92m   Compiling[0m bitflags v2.11.0
+[1m[92m   Compiling[0m symphonia-core v0.6.0
+[1m[92m   Compiling[0m serde_derive v1.0.228
+[1m[92m   Compiling[0m thiserror v1.0.37
+[1m[92m   Compiling[0m proc-macro-error-attr v1.0.4
+[1m[92m   Compiling[0m typenum v1.19.0
+[1m[92m   Compiling[0m khronos_api v3.1.0
+[1m[92m   Compiling[0m regex-lite v0.1.9
+[1m[92m   Compiling[0m memchr v2.5.0
+[1m[92m   Compiling[0m thiserror-impl v1.0.37
+[1m[92m   Compiling[0m symphonia-metadata v0.6.0
+[1m[92m   Compiling[0m generic-array v0.14.7
+[1m[92m   Compiling[0m proc-macro-error v1.0.4
+[1m[92m   Compiling[0m indexmap v1.9.2
+[1m[92m   Compiling[0m xml-rs v0.8.4
+[1m[92m   Compiling[0m ryu v1.0.12
+[1m[92m   Compiling[0m serde_json v1.0.91
+[1m[92m   Compiling[0m version-compare v0.1.1
+[1m[92m   Compiling[0m semver v1.0.16
+[1m[92m   Compiling[0m camino v1.1.2
+[1m[92m   Compiling[0m gl_generator v0.14.0
+[1m[92m   Compiling[0m sdl2-sys v0.37.0 (https://github.com/touchHLE/rust-sdl2?tag=touchHLE-3#b67f98fe)
+[1m[92m   Compiling[0m symphonia-common v0.6.0
+[1m[92m   Compiling[0m regex-automata v0.1.10
+[1m[92m   Compiling[0m os_str_bytes v6.4.1
+[1m[92m   Compiling[0m itoa v1.0.4
+[1m[92m   Compiling[0m heck v0.4.1
+[1m[92m   Compiling[0m hashbrown v0.12.3
+[1m[92m   Compiling[0m anyhow v1.0.68
+[1m[92m   Compiling[0m clap_derive v3.2.18
+[1m[92m   Compiling[0m bstr v0.2.17
+[1m[92m   Compiling[0m clap_lex v0.2.4
+[1m[92m   Compiling[0m csv-core v0.1.10
+[1m[92m   Compiling[0m cargo-platform v0.1.2
+[1m[92m   Compiling[0m atty v0.2.14
+[1m[92m   Compiling[0m crc32fast v1.3.2
+[1m[92m   Compiling[0m strsim v0.10.0
+[1m[92m   Compiling[0m once_cell v1.17.0
+[1m[92m   Compiling[0m unicode-width v0.1.10
+[1m[92m   Compiling[0m itoa v0.4.8
+[1m[92m   Compiling[0m num-conv v0.1.0
+[1m[92m   Compiling[0m textwrap v0.16.0
+[1m[92m   Compiling[0m termcolor v1.2.0
+[1m[92m   Compiling[0m bitflags v1.3.2
+[1m[92m   Compiling[0m powerfmt v0.2.0
+[1m[92m   Compiling[0m time-core v0.1.6
+[1m[92m   Compiling[0m deranged v0.5.5
+[1m[92m   Compiling[0m time-macros v0.2.24
+[1m[92m   Compiling[0m clap v3.2.23
+[1m[92m   Compiling[0m csv v1.1.6
+[1m[92m   Compiling[0m getopts v0.2.21
+[1m[92m   Compiling[0m cargo_metadata v0.15.3
+[1m[92m   Compiling[0m crypto-common v0.1.7
+[1m[92m   Compiling[0m block-buffer v0.10.4
+[1m[92m   Compiling[0m toml v0.5.11
+[1m[92m   Compiling[0m adler v1.0.2
+[1m[92m   Compiling[0m ansi_term v0.12.1
+[1m[92m   Compiling[0m time v0.3.44
+[1m[92m   Compiling[0m cargo-license v0.5.1
+[1m[92m   Compiling[0m miniz_oxide v0.6.2
+[1m[92m   Compiling[0m digest v0.10.7
+[1m[92m   Compiling[0m touchHLE_gl_bindings v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/gles/gl_bindings)
+[1m[92m   Compiling[0m getrandom v0.2.17
+[1m[92m   Compiling[0m touchHLE_stb_image_wrapper v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/image/stb_image_wrapper)
+[1m[92m   Compiling[0m touchHLE_pvrt_decompress_wrapper v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/image/pvrt_decompress_wrapper)
+[1m[92m   Compiling[0m touchHLE_openal_soft_wrapper v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/audio/openal_soft_wrapper)
+[1m[92m   Compiling[0m touchHLE_dynarmic_wrapper v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/cpu/dynarmic_wrapper)
+[1m[92m   Compiling[0m corosensei v0.3.2
+[1m[92m   Compiling[0m ttf-parser v0.15.2
+[1m[92m   Compiling[0m byteorder v1.4.3
+[1m[92m   Compiling[0m sdl2 v0.37.0 (https://github.com/touchHLE/rust-sdl2?tag=touchHLE-3#b67f98fe)
+[1m[92m   Compiling[0m touchHLE_version v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/src/version)
+[1m[92m   Compiling[0m hashbrown v0.16.1
+[1m[92m   Compiling[0m equivalent v1.0.2
+[1m[92m   Compiling[0m extended v0.1.0
+[1m[92m   Compiling[0m symphonia-format-riff v0.6.0
+[1m[92m   Compiling[0m owned_ttf_parser v0.15.2
+[1m[92m   Compiling[0m indexmap v2.12.1
+[1m[33mwarning[0m: touchHLE_version@0.2.3: Cargo.toml version (v0.2.3) is not a prefix of `git describe` version (28bb00d)!
+[1m[92m   Compiling[0m uuid v1.2.2
+[1m[92m   Compiling[0m quick-xml v0.38.4
+[1m[92m   Compiling[0m flate2 v1.0.25
+[1m[92m   Compiling[0m touchHLE v0.2.3 (/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE)
+[1m[92m   Compiling[0m symphonia-codec-aac v0.6.0
+[1m[92m   Compiling[0m symphonia-format-caf v0.6.0
+[1m[92m   Compiling[0m symphonia-codec-alac v0.6.0
+[1m[92m   Compiling[0m symphonia-format-isomp4 v0.6.0
+[1m[92m   Compiling[0m cpufeatures v0.2.17
+[1m[92m   Compiling[0m symphonia-codec-pcm v0.6.0
+[1m[92m   Compiling[0m symphonia-bundle-mp3 v0.6.0
+[1m[92m   Compiling[0m symphonia-codec-adpcm v0.6.0
+[1m[92m   Compiling[0m scopeguard v1.2.0
+[1m[92m   Compiling[0m ab_glyph_rasterizer v0.1.8
+[1m[92m   Compiling[0m windows-link v0.2.0
+[1m[92m   Compiling[0m base64 v0.22.1
+[1m[92m   Compiling[0m plist v1.8.0
+[1m[92m   Compiling[0m windows-sys v0.61.0
+[1m[92m   Compiling[0m rusttype v0.9.3
+[1m[92m   Compiling[0m symphonia v0.6.0
+[1m[92m   Compiling[0m sha1 v0.10.6
+[1m[92m   Compiling[0m zip v0.6.4
+[1m[92m   Compiling[0m mach_object v0.1.17
+[1m[92m   Compiling[0m md-5 v0.10.6
+[1m[92m   Compiling[0m encoding_rs v0.8.35
+[1m[92m   Compiling[0m nibarchive v0.1.0
+[1m[92m   Compiling[0m hound v3.5.0
+[1m[91merror[0m[1m: linking with `cc` failed: exit status: 1[0m
+  [1m[94m|[0m
+  [1m[94m= [0m[1mnote[0m:  "cc" "-Wl,-exported_symbols_list" "-Wl,/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/deps/rustc3Vk2tJ/list" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/deps/rustc3Vk2tJ/symbols.o" "<17 object files omitted>" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/deps/{libhound-6f7eab41ae65fc15,libtouchHLE_version-b920dcef0ae1b6d8,libsdl2-0dfc2a084e006f0c,libsdl2_sys-12a0ee710ce2547e,libmach_object-0a786c6d5ee988e5,libthiserror-9508724c75772eea,libbitflags-29f02404cab6ee9f,libsha1-83a37d37576768d1,libmd5-faf6d64d7c2273fe,libdigest-e3d27e150fc3a898,libblock_buffer-23ea23967416d1af,libcrypto_common-86502a6f243c21c1,libgeneric_array-f38357be8d77f67d,libtypenum-a3b6ea991189ce7e,libtouchHLE_stb_image_wrapper-6cb3f5d9a557ea87,libtouchHLE_pvrt_decompress_wrapper-2c0211b1f943514b,libzip-e609fa7e23640de5,libflate2-21d41f3bb28b48fa,libminiz_oxide-3d63a1fc8882b735,libadler-47e4e92040a93cc6,libbyteorder-70fcec4489089654,libcrc32fast-a4c1b2486eb24ad1,libtouchHLE_gl_bindings-831f166dbf04b83c,libencoding_rs-9a5de1903bfaa15d,libnibarchive-c307c89bf7280f76,libuuid-eedd19c5541424fb,libgetrandom-f480078c28be61c2,librusttype-aa6fee2652578130,libab_glyph_rasterizer-e8b87bb6553f4930,libowned_ttf_parser-9360e6fcdb5512c7,libttf_parser-1e1b01a8740aae50,libcorosensei-d9e014470a6138cc,liblibc-b1ed58ba74028699,libscopeguard-5e1e2bbd22a27737,libtouchHLE_dynarmic_wrapper-14d14b02e8f535f7,libplist-b0602ffcb5e5f446,libtime-a5e6a7dea435ba50,libitoa-50754d6d8a56e2cf,libtime_core-927263bd50189cec,libnum_conv-08860588e11ccf43,libderanged-90237f08a461984e,libpowerfmt-3c88e25e96e63faa,libquick_xml-9d61419f253e9b60,libmemchr-6f47b11f72fccd52,libbase64-47144f82f6f73cd6,libindexmap-321c17b76b4810d7,libequivalent-5e8f6d01797617c9,libhashbrown-492214a9c23f2bca,libserde-deb7508e5d265606,libserde_core-743905c84be92295,libsymphonia-d475b7509c55d8b0,libsymphonia_format_riff-20ff9aac53542df4,libsymphonia_format_isomp4-09aec6908ee22863,libsymphonia_metadata-083f462cb829a4bf,libregex_lite-2091b3be448e30e0,libsymphonia_format_caf-ac3fb5514e775216,libsymphonia_codec_pcm-34cda9b7c638f677,libsymphonia_codec_alac-094d3cc42a7d4997,libsymphonia_codec_adpcm-228180b11df64307,libsymphonia_codec_aac-d173a11a030f1577,libsymphonia_common-1455ac02201242c5,libsymphonia_bundle_mp3-d415402c4759b628,libsymphonia_core-f472d379a713b11d,libbytemuck-c0f699a89c28aa8c,liblog-5d8ce831c8beae3e,libcfg_if-06a8c6c53b02e0e9,libnum_complex-8d3e7e9c37136b39,libnum_traits-0880f3338b75cea0,liblazy_static-f920fc0cd6e332c4,libbitflags-fc95a94a0237405a,libsmallvec-6d3ea080cf9a6729,libtouchHLE_openal_soft_wrapper-7e7c6a476cad0e60}.rlib" "<sysroot>/lib/rustlib/aarch64-apple-ios/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-lc++" "-liconv" "-lc++" "-lSystem" "-lc" "-lm" "-target" "arm64-apple-ios14.0.0" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/sdl2-sys-4a324fbb5d1dd850/out/lib64" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/sdl2-sys-4a324fbb5d1dd850/out/lib" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out/lib" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out/lib64" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out/build/externals/fmt/" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out/build/externals/mcl/src/" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_openal_soft_wrapper-6ad06be31d1c7e15/out/ios/lib" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_openal_soft_wrapper-6ad06be31d1c7e15/out/ios/lib64" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_pvrt_decompress_wrapper-a6eb1f7b9508f3c9/out" "-L" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_stb_image_wrapper-1f0e5c17ec1c013d/out" "-o" "/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/deps/libtouchHLE.dylib" "-Wl,-dead_strip" "-dynamiclib" "-nodefaultlibs"
+  [1m[94m= [0m[1mnote[0m: some arguments are omitted. use `--verbose` to show all linker arguments
+  [1m[94m= [0m[1mnote[0m: ld: warning: ignoring duplicate libraries: '-lc++'
+          ld: warning: search path '/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/sdl2-sys-4a324fbb5d1dd850/out/lib64' not found
+          ld: warning: search path '/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_dynarmic_wrapper-80a1c6a3d8841af1/out/lib64' not found
+          ld: warning: search path '/Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/build/touchHLE_openal_soft_wrapper-6ad06be31d1c7e15/out/ios/lib64' not found
+          Undefined symbols for architecture arm64:
+            "_AVAudioSessionInterruptionTypeKey", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+            "_AudioQueuePause", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+            "_AudioQueueStart", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+            "_CBAdvertisementDataLocalNameKey", referenced from:
+                -[HIDBLEManager centralManager:didDiscoverPeripheral:advertisementData:RSSI:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_CFRelease", referenced from:
+                _UIKit_AddDisplay in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                _UIKit_DelDisplay in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+            "_CFRunLoopRunInMode", referenced from:
+                -[HIDBLEDevice get_feature_report:into:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_CGRectEqualToRect", referenced from:
+                _UIKit_ComputeViewFrame in libsdl2_sys-12a0ee710ce2547e.rlib[176](SDL_uikitvideo.m.o)
+            "_CGRectZero", referenced from:
+                -[SDL_uikitviewcontroller initKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_CHHapticDynamicParameterIDHapticIntensityControl", referenced from:
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_CHHapticEventParameterIDHapticIntensity", referenced from:
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_CHHapticEventTypeHapticContinuous", referenced from:
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_GCHapticDurationInfinite", referenced from:
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_NSDefaultRunLoopMode", referenced from:
+                -[SDL_uikitviewcontroller startAnimation] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_NSLog", referenced from:
+                -[HIDBLEManager updateConnectedSteamControllers:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager startScan:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager stopScan] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManagerDidUpdateState:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "_OBJC_CLASS_$_CADisplayLink", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_CLASS_$_CAEAGLLayer", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_OBJC_CLASS_$_CAMetalLayer", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[172](SDL_uikitmetalview.m.o)
+            "_OBJC_CLASS_$_CBCentralManager", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_OBJC_CLASS_$_CBUUID", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_OBJC_CLASS_$_CHHapticDynamicParameter", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_OBJC_CLASS_$_CHHapticEvent", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_OBJC_CLASS_$_CHHapticEventParameter", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_OBJC_CLASS_$_CHHapticPattern", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_OBJC_CLASS_$_EAGLContext", referenced from:
+                _OBJC_CLASS_$_SDLEAGLContext in libsdl2_sys-12a0ee710ce2547e.rlib[174](SDL_uikitopengles.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[174](SDL_uikitopengles.m.o)
+            "_OBJC_CLASS_$_NSArray", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_OBJC_CLASS_$_NSConstantDictionary", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+            "_OBJC_CLASS_$_NSConstantIntegerNumber", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+            "_OBJC_CLASS_$_NSData", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_OBJC_CLASS_$_NSDictionary", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_OBJC_CLASS_$_NSMapTable", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_OBJC_CLASS_$_NSMutableArray", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_CLASS_$_NSNotificationCenter", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+            "_OBJC_CLASS_$_NSNumber", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_OBJC_CLASS_$_NSObject", referenced from:
+                _OBJC_CLASS_$_SDLInterruptionListener in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                _OBJC_CLASS_$_HIDBLEManager in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_CLASS_$_HIDBLEDevice in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_CLASS_$_SDL_RumbleMotor in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _OBJC_CLASS_$_SDL_RumbleContext in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _OBJC_CLASS_$_SDL_LifecycleObserver in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+                _OBJC_CLASS_$_SDL_DisplayData in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                ...
+            "_OBJC_CLASS_$_NSRunLoop", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[171](SDL_uikitmessagebox.m.o)
+            "_OBJC_CLASS_$_NSString", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[141](SDL_sysurl.m.o)
+            "_OBJC_CLASS_$_UIApplication", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[141](SDL_sysurl.m.o)
+            "_OBJC_CLASS_$_UIDevice", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[163](SDL_syspower.m.o)
+            "_OBJC_CLASS_$_UIKeyCommand", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_CLASS_$_UIPointerInteraction", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+            "_OBJC_CLASS_$_UIPointerRegion", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+            "_OBJC_CLASS_$_UIPointerStyle", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+            "_OBJC_CLASS_$_UIScreen", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[171](SDL_uikitmessagebox.m.o)
+            "_OBJC_CLASS_$_UITextField", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_CLASS_$_UIView", referenced from:
+                _OBJC_CLASS_$_SDL_uikitview in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+            "_OBJC_CLASS_$_UIViewController", referenced from:
+                _OBJC_CLASS_$_SDL_uikitviewcontroller in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_CLASS_$_UIWindow", referenced from:
+                _OBJC_CLASS_$_SDL_uikitwindow in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+            "_OBJC_METACLASS_$_EAGLContext", referenced from:
+                _OBJC_METACLASS_$_SDLEAGLContext in libsdl2_sys-12a0ee710ce2547e.rlib[174](SDL_uikitopengles.m.o)
+            "_OBJC_METACLASS_$_NSObject", referenced from:
+                _OBJC_METACLASS_$_SDLInterruptionListener in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                _OBJC_METACLASS_$_SDLInterruptionListener in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                _OBJC_METACLASS_$_HIDBLEManager in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_HIDBLEManager in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_HIDBLEDevice in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_HIDBLEDevice in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_SDL_RumbleMotor in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _OBJC_METACLASS_$_SDL_RumbleMotor in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ...
+            "_OBJC_METACLASS_$_UIView", referenced from:
+                _OBJC_METACLASS_$_SDL_uikitview in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+            "_OBJC_METACLASS_$_UIViewController", referenced from:
+                _OBJC_METACLASS_$_SDL_uikitviewcontroller in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_OBJC_METACLASS_$_UIWindow", referenced from:
+                _OBJC_METACLASS_$_SDL_uikitwindow in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+            "_UIApplicationDidBecomeActiveNotification", referenced from:
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationDidChangeStatusBarOrientationNotification", referenced from:
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationDidEnterBackgroundNotification", referenced from:
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationDidReceiveMemoryWarningNotification", referenced from:
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationWillEnterForegroundNotification", referenced from:
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationWillResignActiveNotification", referenced from:
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIApplicationWillTerminateNotification", referenced from:
+                -[SDL_LifecycleObserver eventPumpChanged] in libsdl2_sys-12a0ee710ce2547e.rlib[170](SDL_uikitevents.m.o)
+            "_UIKeyInputDownArrow", referenced from:
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller handleCommand:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyInputEscape", referenced from:
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller handleCommand:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyInputLeftArrow", referenced from:
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller handleCommand:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyInputRightArrow", referenced from:
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller handleCommand:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyInputUpArrow", referenced from:
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller handleCommand:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyboardFrameEndUserInfoKey", referenced from:
+                -[SDL_uikitviewcontroller keyboardWillShow:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyboardWillHideNotification", referenced from:
+                -[SDL_uikitviewcontroller initKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller deinitKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIKeyboardWillShowNotification", referenced from:
+                -[SDL_uikitviewcontroller initKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller deinitKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_UIScreenDidConnectNotification", referenced from:
+                +[SDL_DisplayWatch start] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                +[SDL_DisplayWatch stop] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+            "_UIScreenDidDisconnectNotification", referenced from:
+                +[SDL_DisplayWatch start] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                +[SDL_DisplayWatch stop] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+            "_UITextFieldTextDidChangeNotification", referenced from:
+                -[SDL_uikitviewcontroller initKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller deinitKeyboard] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "___CFConstantStringClassReference", referenced from:
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                 in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "___objc_personality_v0", referenced from:
+                /Users/runner/work/IOS-binary-32-bit-monorepo-for-32bit-compatibility./IOS-binary-32-bit-monorepo-for-32bit-compatibility./touchHLE/target/aarch64-apple-ios/release/deps/libsdl2_sys-12a0ee710ce2547e.rlib[171](SDL_uikitmessagebox.m.o)
+            "__objc_empty_cache", referenced from:
+                _OBJC_METACLASS_$_SDLInterruptionListener in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                _OBJC_CLASS_$_SDLInterruptionListener in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                _OBJC_CLASS_$_HIDBLEManager in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_CLASS_$_HIDBLEDevice in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_HIDBLEManager in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_METACLASS_$_HIDBLEDevice in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                _OBJC_CLASS_$_SDL_RumbleMotor in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ...
+            "_glBindFramebuffer", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glBindRenderbuffer", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                ...
+            "_glBlitFramebuffer", referenced from:
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glCheckFramebufferStatus", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glDeleteFramebuffers", referenced from:
+                -[SDL_uikitopenglview destroyFramebuffer] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview destroyFramebuffer] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glDeleteRenderbuffers", referenced from:
+                -[SDL_uikitopenglview destroyFramebuffer] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview destroyFramebuffer] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview destroyFramebuffer] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glDiscardFramebufferEXT", referenced from:
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glFramebufferRenderbuffer", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glGenFramebuffers", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glGenRenderbuffers", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glGetIntegerv", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glGetRenderbufferParameteriv", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glInvalidateFramebuffer", referenced from:
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glLabelObjectEXT", referenced from:
+                -[SDL_uikitopenglview setDebugLabels] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview setDebugLabels] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview setDebugLabels] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview setDebugLabels] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview setDebugLabels] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glRenderbufferStorage", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glRenderbufferStorageMultisample", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_glResolveMultisampleFramebufferAPPLE", referenced from:
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_kCFRunLoopDefaultMode", referenced from:
+                -[HIDBLEDevice get_feature_report:into:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_kEAGLColorFormatRGB565", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_kEAGLColorFormatRGBA8", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_kEAGLColorFormatSRGBA8", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_kEAGLDrawablePropertyColorFormat", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_kEAGLDrawablePropertyRetainedBacking", referenced from:
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_objc_alloc", referenced from:
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager updateConnectedSteamControllers:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager centralManager:didDiscoverPeripheral:advertisementData:RSSI:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ...
+            "_objc_alloc_init", referenced from:
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _UIKit_AddDisplay in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_objc_autoreleasePoolPop", referenced from:
+                -[SDL_RumbleMotor cleanup] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _UIKit_GL_RestoreCurrentContext in libsdl2_sys-12a0ee710ce2547e.rlib[174](SDL_uikitopengles.m.o)
+                _SDL_NSLog in libsdl2_sys-12a0ee710ce2547e.rlib[176](SDL_uikitvideo.m.o)
+                _SDL_HideHomeIndicatorHintChanged in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                _UIKit_GetSupportedOrientations in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+                ...
+            "_objc_autoreleasePoolPush", referenced from:
+                -[SDL_RumbleMotor cleanup] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                _UIKit_GL_RestoreCurrentContext in libsdl2_sys-12a0ee710ce2547e.rlib[174](SDL_uikitopengles.m.o)
+                _SDL_NSLog in libsdl2_sys-12a0ee710ce2547e.rlib[176](SDL_uikitvideo.m.o)
+                _SDL_HideHomeIndicatorHintChanged in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                _UIKit_GetSupportedOrientations in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+                ...
+            "_objc_autoreleaseReturnValue", referenced from:
+                -[SDL_uikitopenglview context] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitview pointerInteraction:regionForRequest:defaultRegion:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview pointerInteraction:styleForRegion:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview pointerInteraction:styleForRegion:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitviewcontroller keyCommands] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_objc_copyWeak", referenced from:
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ___copy_helper_block_e8_32w in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+            "_objc_destroyWeak", referenced from:
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ...
+            "_objc_enumerationMutation", referenced from:
+                -[HIDBLEManager appWillResignActiveNotification:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager updateConnectedSteamControllers:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEDevice peripheral:didDiscoverServices:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEDevice peripheral:didDiscoverCharacteristicsForService:error:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_uikitview touchesBegan:withEvent:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview touchesEnded:withEvent:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview touchesMoved:withEvent:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                ...
+            "_objc_loadWeakRetained", referenced from:
+                ___47-[SDL_RumbleMotor initWithController:locality:]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                ___47-[SDL_RumbleMotor initWithController:locality:]_block_invoke.14 in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview updateFrame] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                -[SDL_uikitopenglview swapBuffers] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+                ...
+            "_objc_msgSend", referenced from:
+                 in objc-stubs-file
+            "_objc_msgSendSuper2", referenced from:
+                -[HIDBLEDevice init] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEDevice initWithPeripheral:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleContext initWithLowFrequencyMotor:HighFrequencyMotor:LeftTriggerMotor:RightTriggerMotor:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_uikitmetalview initWithFrame:scale:] in libsdl2_sys-12a0ee710ce2547e.rlib[172](SDL_uikitmetalview.m.o)
+                -[SDL_uikitmetalview layoutSubviews] in libsdl2_sys-12a0ee710ce2547e.rlib[172](SDL_uikitmetalview.m.o)
+                -[SDL_DisplayData initWithScreen:] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                ...
+            "_objc_opt_class", referenced from:
+                +[SDL_uikitmetalview layerClass] in libsdl2_sys-12a0ee710ce2547e.rlib[172](SDL_uikitmetalview.m.o)
+                +[SDL_uikitopenglview layerClass] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_objc_opt_new", referenced from:
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_WindowData init] in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+            "_objc_opt_respondsToSelector", referenced from:
+                -[SDL_DisplayData initWithScreen:] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                -[SDL_DisplayData initWithScreen:] in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                _UIKit_AddDisplay in libsdl2_sys-12a0ee710ce2547e.rlib[173](SDL_uikitmodes.m.o)
+                -[SDL_uikitview touchTypeForTouch:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview pressureForTouch:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                -[SDL_uikitview scancodeFromPress:] in libsdl2_sys-12a0ee710ce2547e.rlib[177](SDL_uikitview.m.o)
+                _SDL_HideHomeIndicatorHintChanged in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                ...
+            "_objc_release", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "_objc_retain", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[HIDBLEManager updateConnectedSteamControllers:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager startScan:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___copy_helper_block_e8_32s in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "_objc_retainAutorelease", referenced from:
+                -[HIDBLEDevice peripheral:didUpdateValueForCharacteristic:error:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEDevice peripheral:didUpdateValueForCharacteristic:error:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_RumbleMotor setIntensity:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_uikitviewcontroller textFieldTextDidChange:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+                -[SDL_uikitviewcontroller textFieldTextDidChange:] in libsdl2_sys-12a0ee710ce2547e.rlib[178](SDL_uikitviewcontroller.m.o)
+            "_objc_retainAutoreleaseReturnValue", referenced from:
+                +[HIDBLEManager sharedInstance] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                +[HIDBLEManager sharedInstance] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_objc_retainAutoreleasedReturnValue", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ___31+[HIDBLEManager sharedInstance]_block_invoke in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "_objc_setProperty_nonatomic_copy", referenced from:
+                -[SDL_WindowData setViews:] in libsdl2_sys-12a0ee710ce2547e.rlib[180](SDL_uikitwindow.m.o)
+            "_objc_storeStrong", referenced from:
+                -[HIDBLEManager setCentralManager:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager setDeviceMap:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager setBleSerialQueue:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager .cxx_destruct] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager .cxx_destruct] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager .cxx_destruct] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEDevice setBleSteamController:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+            "_objc_storeWeak", referenced from:
+                -[SDL_RumbleMotor initWithController:locality:] in libsdl2_sys-12a0ee710ce2547e.rlib[161](SDL_mfijoystick.m.o)
+                -[SDL_uikitopenglview initWithFrame:scale:retainBacking:rBits:gBits:bBits:aBits:depthBits:stencilBits:sRGB:multisamples:context:] in libsdl2_sys-12a0ee710ce2547e.rlib[175](SDL_uikitopenglview.m.o)
+            "_objc_sync_enter", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[HIDBLEManager startScan:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager stopScan] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+            "_objc_sync_exit", referenced from:
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener audioSessionInterruption:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[SDLInterruptionListener applicationBecameActive:] in libsdl2_sys-12a0ee710ce2547e.rlib[142](SDL_coreaudio.m.o)
+                -[HIDBLEManager startScan:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager startScan:] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager stopScan] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                -[HIDBLEManager stopScan] in libsdl2_sys-12a0ee710ce2547e.rlib[143](hid.m.o)
+                ...
+          ld: symbol(s) not found for architecture arm64
+          clang: error: linker command failed with exit code 1 (use -v to see invocation)
+          
+
+[1m[91merror[0m: could not compile `touchHLE` (lib) due to 1 previous error
