@@ -1,17 +1,14 @@
 name: iOS build (touchHLE)
-
 on:
   workflow_dispatch:
   push:
     paths:
       - "touchHLE/**"
       - ".github/workflows/ios.yml"
-
 env:
   CARGO_TERM_COLOR: always
   IPHONEOS_DEPLOYMENT_TARGET: "14.0"
   CMAKE_POLICY_VERSION_MINIMUM: "3.5"
-
 jobs:
   ios-core:
     runs-on: macos-15
@@ -21,7 +18,6 @@ jobs:
     steps:
       - name: Checkout monorepo
         uses: actions/checkout@v4
-
       # git subtree flattened touchHLE's submodules, so fetch the vendored deps
       # explicitly. Shallow + specific-commit + retries to survive runner network blips.
       - name: Fetch vendor dependencies
@@ -45,19 +41,40 @@ jobs:
           fetch_dep vendor/openal-soft https://github.com/kcat/openal-soft      HEAD
           fetch_dep vendor/stb         https://github.com/nothings/stb.git      dev
           git -C vendor/dynarmic submodule update --init --recursive --depth 1
-
       - name: Install Boost (dynarmic dependency)
         run: brew install boost
-
       - name: Add Rust iOS target
         run: |
           rustup target add aarch64-apple-ios
           rustc --version
           xcrun --sdk iphoneos --show-sdk-path
-
       # MILESTONE 1: does the shared core cross-compile for device arm64?
       - name: Build touchHLE core (aarch64-apple-ios)
         run: |
-          export SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
-          echo "Using SDKROOT=$SDKROOT"
+          set -euo pipefail
+
+          # SDKROOT controls clang's own -isysroot default, but the `cmake`
+          # crate (used by sdl2-sys's build.rs) does NOT read SDKROOT for the
+          # CMAKE_OSX_SYSROOT cache variable once CMAKE_SYSTEM_NAME=iOS is in
+          # play. Without an explicit value it has been observed to fall back
+          # to "/", which CMake's iOS-Initialize.cmake rejects with
+          # "/ is not an iOS SDK". So we set both:
+          #  - SDKROOT, for the compiler driver itself
+          #  - CMAKE_OSX_SYSROOT (generic + target-triple-scoped), which the
+          #    `cmake` crate's getenv_target_os() helper checks in this order:
+          #    CMAKE_OSX_SYSROOT_aarch64-apple-ios
+          #    CMAKE_OSX_SYSROOT_aarch64_apple_ios
+          #    TARGET_CMAKE_OSX_SYSROOT
+          #    CMAKE_OSX_SYSROOT
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "Using SDKROOT=$SDK_PATH"
+
+          export SDKROOT="$SDK_PATH"
+          export CMAKE_OSX_SYSROOT="$SDK_PATH"
+          export CMAKE_OSX_SYSROOT_aarch64_apple_ios="$SDK_PATH"
+          export "CMAKE_OSX_SYSROOT_aarch64-apple-ios=$SDK_PATH"
+          export CMAKE_OSX_ARCHITECTURES="arm64"
+          export CMAKE_SYSTEM_NAME="iOS"
+          export CMAKE_OSX_DEPLOYMENT_TARGET="$IPHONEOS_DEPLOYMENT_TARGET"
+
           cargo build --release --target aarch64-apple-ios --lib 2>&1 | tee build-ios.log
