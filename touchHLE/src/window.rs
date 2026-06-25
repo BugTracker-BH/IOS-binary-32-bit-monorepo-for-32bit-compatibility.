@@ -532,6 +532,22 @@ impl Window {
         window.gl_default_framebuffer = screen_fbo;
         window.internal_gl_ins = Some(gl_ins);
 
+        // On iOS, enable vsync on the GL context so each swapped frame is
+        // actually scheduled for display. Without an explicit swap interval the
+        // presented drawable can fail to reach the screen during the run loop
+        // (the launch/splash frame still shows, but in-game frames don't).
+        #[cfg(target_os = "ios")]
+        {
+            if let Err(e) = window
+                .video_ctx
+                .gl_set_swap_interval(sdl2::video::SwapInterval::VSync)
+            {
+                log!("Warning: couldn't set iOS swap interval: {}", e);
+            } else {
+                log!("[diag] iOS swap interval set to VSync");
+            }
+        }
+
         // === iOS display diagnostics: SDL window / view state at creation ===
         {
             let flags = window.window.window_flags();

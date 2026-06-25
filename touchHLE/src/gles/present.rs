@@ -64,16 +64,8 @@ pub unsafe fn present_frame(
         viewport.2 as _,
         viewport.3 as _,
     );
-    // [diag] TEMPORARY: clear to magenta instead of black, and on iOS stop here
-    // (draw NO content) so the whole screen is solid magenta every frame.
-    // Decisive test: if the game screen shows magenta, presentation reaches the
-    // display and the black was the guest's (empty) content; if it stays black,
-    // presentation itself isn't reaching the screen during the run loop.
-    // Revert to black + remove the early return once diagnosed.
-    gles.ClearColor(1.0, 0.0, 1.0, 1.0);
+    gles.ClearColor(0.0, 0.0, 0.0, 1.0);
     gles.Clear(gles11::COLOR_BUFFER_BIT | gles11::DEPTH_BUFFER_BIT | gles11::STENCIL_BUFFER_BIT);
-    #[cfg(target_os = "ios")]
-    return;
     gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
     let vertices: [f32; 12] = [
         -1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0,
