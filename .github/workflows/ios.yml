@@ -113,10 +113,12 @@ jobs:
             printf '%s\n' '<key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>'
             printf '%s\n' '<key>UIStatusBarHidden</key><true/>'
             printf '%s\n' '<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationPortrait</string></array>'
+            printf '%s\n' '<key>UILaunchScreen</key><dict/>'
+            printf '%s\n' '<key>UIApplicationSupportsIndirectInputEvents</key><true/>'
             printf '%s\n' '</dict></plist>'
           } > "$APP/Info.plist"
           echo "--- Info.plist ---"; cat "$APP/Info.plist"; plutil -lint "$APP/Info.plist" || true
-          # ---- entitlements (minimal TrollStore set: JIT only, no platform/no-container) ----
+          # ---- entitlements (minimal TrollStore set: JIT only) ----
           { printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
             printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
             printf '%s\n' '<plist version="1.0"><dict>'
