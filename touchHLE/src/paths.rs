@@ -221,9 +221,10 @@ pub fn prepopulate_user_data_dir() {
                 for entry in entries.flatten() {
                     let dst = user_apps.join(entry.file_name());
                     if !dst.exists() {
-                        match std::os::unix::fs::symlink(entry.path(), &dst) {
-                            Ok(()) => log!("Linked bundled app: {}", dst.display()),
-                            Err(e) => log!("Couldn't link {}: {}", dst.display(), e),
+                        if let Err(e) = std::os::unix::fs::symlink(entry.path(), &dst) {
+                            log!("Couldn't link bundled app {}: {}", dst.display(), e);
+                        } else {
+                            log!("Linked bundled app: {}", dst.display());
                         }
                     }
                 }
