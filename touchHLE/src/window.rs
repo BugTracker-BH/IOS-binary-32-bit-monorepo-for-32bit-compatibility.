@@ -105,6 +105,81 @@ fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32
         }
     }
 }
+
+/// iOS-only: introspect the live UIKit view hierarchy via the Objective-C
+/// runtime and log it, to diagnose why SDL's GL view (a CAEAGLLayer) is not
+/// being composited to the screen. Must be called on the main thread.
+#[cfg(target_os = "ios")]
+unsafe fn ios_dump_view_hierarchy(tag: &str) {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_void};
+    type Id = *mut c_void;
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn objc_msgSend();
+    }
+    unsafe fn sel(name: &str) -> *mut c_void {
+        sel_registerName(CString::new(name).unwrap().as_ptr())
+    }
+    unsafe fn class(name: &str) -> Id {
+        objc_getClass(CString::new(name).unwrap().as_ptr())
+    }
+    // id obj.selector()  (no args)
+    unsafe fn msg(obj: Id, selector: &str) -> Id {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel(selector))
+    }
+    // BOOL obj.selector()  (returned as i8 to avoid bool-ABI UB)
+    unsafe fn msg_i8(obj: Id, selector: &str) -> i8 {
+        if obj.is_null() {
+            return -1;
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> i8 =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel(selector))
+    }
+    // NSUInteger obj.selector()
+    unsafe fn msg_uint(obj: Id, selector: &str) -> usize {
+        if obj.is_null() {
+            return 0;
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> usize =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel(selector))
+    }
+
+    let app = msg(class("UIApplication"), "sharedApplication");
+    let mut key_window = msg(app, "keyWindow");
+    if key_window.is_null() {
+        // keyWindow is deprecated on iOS 13+ and may be nil; fall back to
+        // windows[0].
+        let windows = msg(app, "windows");
+        let count = msg_uint(windows, "count");
+        if count > 0 {
+            let f: extern "C" fn(Id, *mut c_void, usize) -> Id =
+                std::mem::transmute(objc_msgSend as *const ());
+            key_window = f(windows, sel("objectAtIndex:"), 0);
+        }
+        log!("[diag-objc] {}: keyWindow was nil; windows.count={}", tag, count);
+    }
+    let root_vc = msg(key_window, "rootViewController");
+    let root_view = msg(root_vc, "view");
+    let root_view_window = msg(root_view, "window");
+    let subviews = msg(root_view, "subviews");
+    let subview_count = msg_uint(subviews, "count");
+    let is_key = msg_i8(key_window, "isKeyWindow");
+    let hidden = msg_i8(key_window, "isHidden");
+    log!(
+        "[diag-objc] {}: keyWindow={:?} isKey={} hidden={} rootVC={:?} rootView={:?} rootView.window={:?} rootView.subviews={}",
+        tag, key_window, is_key, hidden, root_vc, root_view, root_view_window, subview_count
+    );
+}
+
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.
@@ -478,6 +553,10 @@ impl Window {
                 "[diag] SDL window: logical_size={}x{} drawable={}x{} position=({},{}) default_fb={}",
                 sw, sh, dw, dh, px, py, screen_fbo
             );
+            #[cfg(target_os = "ios")]
+            unsafe {
+                ios_dump_view_hierarchy("at-creation");
+            }
         }
 
         if window.splash_image.is_some() {
@@ -1381,6 +1460,10 @@ impl Window {
                 flags & 0x0000_0040 != 0,
                 sdl2::get_error()
             );
+            #[cfg(target_os = "ios")]
+            unsafe {
+                ios_dump_view_hierarchy("during-run-loop");
+            }
         }
     }
 
