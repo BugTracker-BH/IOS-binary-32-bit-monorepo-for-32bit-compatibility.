@@ -22,16 +22,28 @@ jobs:
         uses: actions/checkout@v4
 
       # git subtree flattened touchHLE's submodules, so fetch the vendored deps
-      # explicitly at the pins from touchHLE/.gitmodules.
+      # explicitly. Shallow + specific-commit + retries to survive runner network blips.
       - name: Fetch vendor dependencies
         run: |
-          rm -rf vendor/SDL vendor/dynarmic vendor/openal-soft vendor/stb
-          git clone https://github.com/libsdl-org/SDL.git vendor/SDL
-          git -C vendor/SDL checkout 07d0f51fa292895443f563f0cbde4cb3802d87fa
-          git clone https://github.com/touchHLE/dynarmic.git vendor/dynarmic
-          git -C vendor/dynarmic submodule update --init --recursive
-          git clone https://github.com/kcat/openal-soft vendor/openal-soft
-          git clone -b dev https://github.com/nothings/stb.git vendor/stb
+          git config --global advice.detachedHead false
+          fetch_dep () {  # $1=dir  $2=url  $3=ref
+            rm -rf "$1"; mkdir -p "$1"
+            git -C "$1" init -q
+            git -C "$1" remote add origin "$2"
+            for i in 1 2 3 4 5; do
+              if git -C "$1" fetch --depth 1 origin "$3"; then
+                git -C "$1" checkout -q FETCH_HEAD
+                return 0
+              fi
+              echo "retry $i for $2 ..."; sleep 15
+            done
+            echo "FAILED to fetch $2"; return 1
+          }
+          fetch_dep vendor/SDL         https://github.com/libsdl-org/SDL.git    07d0f51fa292895443f563f0cbde4cb3802d87fa
+          fetch_dep vendor/dynarmic    https://github.com/touchHLE/dynarmic.git HEAD
+          fetch_dep vendor/openal-soft https://github.com/kcat/openal-soft      HEAD
+          fetch_dep vendor/stb         https://github.com/nothings/stb.git      dev
+          git -C vendor/dynarmic submodule update --init --recursive --depth 1
 
       - name: Install Boost (dynarmic dependency)
         run: brew install boost
