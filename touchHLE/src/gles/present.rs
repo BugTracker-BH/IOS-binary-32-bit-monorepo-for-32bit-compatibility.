@@ -64,7 +64,11 @@ pub unsafe fn present_frame(
         viewport.2 as _,
         viewport.3 as _,
     );
-    gles.ClearColor(0.0, 0.0, 0.0, 1.0);
+    // [diag] TEMPORARY: clear to magenta instead of black. If any magenta shows
+    // on screen, SDL's view IS composited and the bug is empty content; if the
+    // screen stays black, the view isn't visible (UIKit compositing). Revert to
+    // (0,0,0,1) once diagnosed.
+    gles.ClearColor(1.0, 0.0, 1.0, 1.0);
     gles.Clear(gles11::COLOR_BUFFER_BIT | gles11::DEPTH_BUFFER_BIT | gles11::STENCIL_BUFFER_BIT);
     gles.BindBuffer(gles11::ARRAY_BUFFER, 0);
     let vertices: [f32; 12] = [
