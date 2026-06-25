@@ -91,6 +91,33 @@ fn main() {
     if owned.is_empty() {
         owned.push(CString::new("touchHLE").unwrap());
     }
+    // Launch the bundled app directly, skipping touchHLE's app picker. On iOS
+    // the picker is a separate SDL window; creating it and then tearing it down
+    // to create the game's window leaves the *second* window's view uncomposited
+    // (black screen), while the first window composites fine. By passing the
+    // bundled app path as an argument, only one window is ever created.
+    // The bundled app lives next to the executable in <bundle>/touchHLE_apps/.
+    if let Some(app_path) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.join("touchHLE_apps")))
+        .and_then(|dir| std::fs::read_dir(dir).ok())
+        .and_then(|entries| {
+            entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .find(|p| {
+                    p.extension()
+                        .map(|x| x == "app" || x == "ipa")
+                        .unwrap_or(false)
+                })
+        })
+    {
+        eprintln!("[ios] launching bundled app directly: {app_path:?}");
+        if let Ok(cs) = CString::new(app_path.to_string_lossy().as_bytes()) {
+            owned.push(cs);
+        }
+    } else {
+        eprintln!("[ios] no bundled app found; falling back to app picker");
+    }
     let mut argv: Vec<*mut c_char> = owned.iter().map(|a| a.as_ptr() as *mut c_char).collect();
     argv.push(std::ptr::null_mut());
     let argc = owned.len() as c_int;
