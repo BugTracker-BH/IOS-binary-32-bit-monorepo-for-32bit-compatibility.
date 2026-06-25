@@ -25,27 +25,30 @@ fn main() {
     use std::os::raw::{c_char, c_int};
 
     // A SpringBoard launch has no attached console, so redirect stdout+stderr to
-    // a file we can read over SSH afterwards. The app has the no-container
-    // entitlement, so /var/mobile is writable. stderr is unbuffered in Rust, so
-    // breadcrumbs / panics / the trampoline's error print land immediately even
-    // if the process is killed.
+    // a file we can read over SSH afterwards. Use the temp dir, which is writable
+    // whether or not the app has a sandbox container. stderr is unbuffered in
+    // Rust, so breadcrumbs / panics / the trampoline's error print land
+    // immediately even if the process is killed.
+    let log_path = std::env::temp_dir().join("touchHLE-ios.log");
     unsafe {
-        if let Ok(path) = CString::new("/var/mobile/touchHLE-ios.log") {
-            let fd = libc::open(
-                path.as_ptr(),
-                libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC,
-                0o644,
-            );
-            if fd >= 0 {
-                libc::dup2(fd, 1);
-                libc::dup2(fd, 2);
-                if fd > 2 {
-                    libc::close(fd);
+        if let Some(s) = log_path.to_str() {
+            if let Ok(path) = CString::new(s) {
+                let fd = libc::open(
+                    path.as_ptr(),
+                    libc::O_WRONLY | libc::O_CREAT | libc::O_TRUNC,
+                    0o644,
+                );
+                if fd >= 0 {
+                    libc::dup2(fd, 1);
+                    libc::dup2(fd, 2);
+                    if fd > 2 {
+                        libc::close(fd);
+                    }
                 }
             }
         }
     }
-    eprintln!("[ios] main() reached; log redirected; about to call SDL_UIKitRunApp");
+    eprintln!("[ios] main() reached; log at {log_path:?}; about to call SDL_UIKitRunApp");
 
     extern "C" {
         fn SDL_SetMainReady();
