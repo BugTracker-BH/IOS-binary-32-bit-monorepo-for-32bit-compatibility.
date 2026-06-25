@@ -1,0 +1,59 @@
+name: iOS build (touchHLE)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "touchHLE/**"
+      - ".github/workflows/ios.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+
+jobs:
+  ios-core:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: touchHLE
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+
+      # git subtree flattened touchHLE's submodules, so fetch the vendored deps
+      # explicitly at the pins from touchHLE/.gitmodules.
+      - name: Fetch vendor dependencies
+        run: |
+          rm -rf vendor/SDL vendor/dynarmic vendor/openal-soft vendor/stb
+          git clone https://github.com/libsdl-org/SDL.git vendor/SDL
+          git -C vendor/SDL checkout 07d0f51fa292895443f563f0cbde4cb3802d87fa
+          git clone https://github.com/touchHLE/dynarmic.git vendor/dynarmic
+          git -C vendor/dynarmic submodule update --init --recursive
+          git clone https://github.com/kcat/openal-soft vendor/openal-soft
+          git clone -b dev https://github.com/nothings/stb.git vendor/stb
+
+      - name: Install Boost (dynarmic dependency)
+        run: brew install boost
+
+      - name: Add Rust iOS target
+        run: |
+          rustup target add aarch64-apple-ios
+          rustc --version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      # MILESTONE 1: does the shared core cross-compile for device arm64?
+      - name: Build touchHLE core (aarch64-apple-ios)
+        run: cargo build --release --target aarch64-apple-ios --lib 2>&1 | tee build-ios.log
+
+      - name: Show produced artifacts
+        if: always()
+        run: ls -la target/aarch64-apple-ios/release/ || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-core-build-log
+          path: touchHLE/build-ios.log
+          if-no-files-found: warn
