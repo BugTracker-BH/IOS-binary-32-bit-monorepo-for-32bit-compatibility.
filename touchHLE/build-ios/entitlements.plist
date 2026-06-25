@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- dynarmic generates arm64 host code at runtime and needs RWX/executable
+       pages. On a jailbroken device these grant that. Set lifted from LiveExec32. -->
+  <key>dynamic-codesigning</key>
+  <true/>
+  <key>com.apple.private.amfi.can-execute-cdhash</key>
+  <true/>
+  <key>get-task-allow</key>
+  <true/>
+  <key>platform-application</key>
+  <true/>
+  <key>com.apple.private.security.no-container</key>
+  <true/>
+</dict>
+</plist>

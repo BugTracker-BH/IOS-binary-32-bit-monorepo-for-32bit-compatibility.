@@ -1,0 +1,16 @@
+# Rust / native build outputs
+/touchHLE/target/
+/touchHLE/vendor/SDL/
+/touchHLE/vendor/dynarmic/
+/touchHLE/vendor/openal-soft/
+/touchHLE/vendor/stb/
+# iOS packaging output
+/touchHLE/build-ios/_out/
+/touchHLE/build-ios/touchHLE.ipa
+/touchHLE/build-ios/touchHLE_rootless.deb
+# Theos build junk (LiveExec32)
+/LiveExec32/.theos/
+/LiveExec32/packages/
+# Snowsight Workspace empty-directory markers
+.folder
+**/.folder
