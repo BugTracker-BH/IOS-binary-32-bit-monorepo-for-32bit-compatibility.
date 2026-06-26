@@ -595,6 +595,16 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     let mut texture: GLuint = 0;
     gles.GenTextures(1, &mut texture);
     gles.BindTexture(gles11::TEXTURE_2D, texture);
+    // Check framebuffer completeness before the copy
+    #[cfg(target_os = "ios")]
+    {
+        let fb_status = gles.CheckFramebufferStatusOES(gles11::FRAMEBUFFER_OES);
+        let pre_err = gles.GetError();
+        log!(
+            "[ios-present] before CopyTexImage2D: fb_status=0x{:x} (complete=0x{:x}) width={} height={} pre_err=0x{:x}",
+            fb_status, gles11::FRAMEBUFFER_COMPLETE_OES, width, height, pre_err
+        );
+    }
     gles.CopyTexImage2D(
         gles11::TEXTURE_2D,
         0,
@@ -605,6 +615,15 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
         height,
         0,
     );
+    #[cfg(target_os = "ios")]
+    {
+        let post_err = gles.GetError();
+        if post_err != 0 {
+            log!("[ios-present] ERROR after CopyTexImage2D: 0x{:x}", post_err);
+        } else {
+            log!("[ios-present] CopyTexImage2D OK ({}x{}, GL_RGB)", width, height);
+        }
+    }
     // The texture will not have any mip levels so we must ensure the filter
     // does not use them, else rendering will fail.
     gles.TexParameteri(
