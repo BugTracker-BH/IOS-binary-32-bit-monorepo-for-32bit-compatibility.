@@ -18,8 +18,52 @@ use super::gles_generic::GLES;
 use super::util::{try_decode_pvrtc, PalettedTextureFormat};
 use super::GLESContext;
 use crate::window::{GLContext, GLVersion, Window};
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::ffi::CStr;
 use std::marker::PhantomData;
+
+// --- Apple GL ES 1.1 non-power-of-two (NPOT) texture workaround ---
+// Apple's GL ES 1.1 only supports NPOT textures via
+// GL_APPLE_texture_2D_limited_npot, which requires GL_CLAMP_TO_EDGE wrap and a
+// non-mipmap min filter. An NPOT texture left at the default GL_REPEAT wrap is
+// "incomplete", so texturing is silently disabled and geometry renders with the
+// flat glColor (a white screen for e.g. JellyCar). Desktop GL has no such
+// restriction, which is why such games render fine there but white on iOS. We
+// track which texture names are NPOT and force CLAMP_TO_EDGE + a non-mipmap min
+// filter for them. POT textures are untouched, so legitimate tiling still works.
+thread_local! {
+    static NPOT_TEXTURES: RefCell<HashSet<GLuint>> = RefCell::new(HashSet::new());
+    static BOUND_TEXTURE_2D: Cell<GLuint> = Cell::new(0);
+}
+
+fn is_power_of_two(n: GLsizei) -> bool {
+    n > 0 && (n & (n - 1)) == 0
+}
+
+fn bound_tex_is_npot() -> bool {
+    let t = BOUND_TEXTURE_2D.with(|c| c.get());
+    t != 0 && NPOT_TEXTURES.with(|s| s.borrow().contains(&t))
+}
+
+/// Override a texture parameter so an NPOT texture stays "complete" on Apple
+/// GL ES 1.1. Only takes effect when the bound GL_TEXTURE_2D is known NPOT.
+fn npot_adjust_param(pname: GLenum, param: GLint) -> GLint {
+    if !bound_tex_is_npot() {
+        return param;
+    }
+    if pname == gles11::TEXTURE_WRAP_S || pname == gles11::TEXTURE_WRAP_T {
+        return gles11::CLAMP_TO_EDGE as GLint;
+    }
+    if pname == gles11::TEXTURE_MIN_FILTER {
+        // mipmap min filters (0x2700..=0x2703) are invalid for NPOT here.
+        let p = param as u32;
+        if (0x2700..=0x2703).contains(&p) {
+            return gles11::LINEAR as GLint;
+        }
+    }
+    param
+}
 
 pub struct GLES1NativeContext {
     gl_ctx: GLContext,
@@ -404,6 +448,37 @@ impl GLES for GLES1Native<'_> {
         type_: GLenum,
         indices: *const GLvoid,
     ) {
+        // DIAGNOSTIC (temporary): dump the actual texcoord-array values native GL
+        // will read, for the first few textured draws, to find why JellyCar
+        // renders white despite complete textures + correct state.
+        {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            if gles11::IsEnabled(gles11::TEXTURE_2D) != 0 {
+                let n = N.fetch_add(1, Ordering::Relaxed);
+                if n < 10 {
+                    let mut tcp: *mut GLvoid = std::ptr::null_mut();
+                    gles11::GetPointerv(0x8092, (&mut tcp as *mut *mut GLvoid).cast());
+                    let mut sz: GLint = 0;
+                    gles11::GetIntegerv(0x8088, &mut sz);
+                    let mut ty: GLint = 0;
+                    gles11::GetIntegerv(0x8089, &mut ty);
+                    let mut st: GLint = 0;
+                    gles11::GetIntegerv(0x808A, &mut st);
+                    let mut tc = [0f32; 8];
+                    if !tcp.is_null() && ty as GLenum == gles11::FLOAT {
+                        let f = tcp as *const f32;
+                        for (i, v) in tc.iter_mut().enumerate() {
+                            *v = *f.add(i);
+                        }
+                    }
+                    log!(
+                        "[diag-tc] #{} count={} tcSize={} tcType=0x{:x} tcStride={} tcPtrNull={} tc8={:?}",
+                        n, count, sz, ty, st, tcp.is_null(), tc
+                    );
+                }
+            }
+        }
         gles11::DrawElements(mode, count, type_, indices)
     }
 
@@ -468,15 +543,28 @@ impl GLES for GLES1Native<'_> {
         gles11::IsTexture(texture)
     }
     unsafe fn BindTexture(&mut self, target: GLenum, texture: GLuint) {
+        if target == gles11::TEXTURE_2D {
+            BOUND_TEXTURE_2D.with(|c| c.set(texture));
+        }
         gles11::BindTexture(target, texture)
     }
     unsafe fn TexParameteri(&mut self, target: GLenum, pname: GLenum, param: GLint) {
+        let param = if target == gles11::TEXTURE_2D {
+            npot_adjust_param(pname, param)
+        } else {
+            param
+        };
         gles11::TexParameteri(target, pname, param)
     }
     unsafe fn TexParameterf(&mut self, target: GLenum, pname: GLenum, param: GLfloat) {
         gles11::TexParameterf(target, pname, param)
     }
     unsafe fn TexParameterx(&mut self, target: GLenum, pname: GLenum, param: GLfixed) {
+        let param = if target == gles11::TEXTURE_2D {
+            npot_adjust_param(pname, param as GLint) as GLfixed
+        } else {
+            param
+        };
         gles11::TexParameterx(target, pname, param)
     }
     unsafe fn TexParameteriv(&mut self, target: GLenum, pname: GLenum, params: *const GLint) {
@@ -510,6 +598,35 @@ impl GLES for GLES1Native<'_> {
             // https://android-review.googlesource.com/c/platform/external/qemu/+/974666
             internalformat = gles11::BGRA_EXT as GLint
         }
+        // Track NPOT-ness for the bound texture so TexParameteri can keep it
+        // complete, and force CLAMP_TO_EDGE here too in case wrap was set before
+        // this upload (see top-of-file note).
+        let npot = target == gles11::TEXTURE_2D
+            && (!is_power_of_two(width) || !is_power_of_two(height));
+        if target == gles11::TEXTURE_2D && level == 0 {
+            let tex = BOUND_TEXTURE_2D.with(|c| c.get());
+            if tex != 0 {
+                NPOT_TEXTURES.with(|s| {
+                    let mut set = s.borrow_mut();
+                    if npot {
+                        set.insert(tex);
+                    } else {
+                        set.remove(&tex);
+                    }
+                });
+            }
+            {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static N: AtomicU32 = AtomicU32::new(0);
+                let n = N.fetch_add(1, Ordering::Relaxed);
+                if n < 40 {
+                    log!(
+                        "[diag-teximg] tex={} {}x{} npot={} fmt=0x{:x}",
+                        tex, width, height, npot, format
+                    );
+                }
+            }
+        }
         gles11::TexImage2D(
             target,
             level,
@@ -520,7 +637,19 @@ impl GLES for GLES1Native<'_> {
             format,
             type_,
             pixels,
-        )
+        );
+        if npot {
+            gles11::TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_WRAP_S,
+                gles11::CLAMP_TO_EDGE as GLint,
+            );
+            gles11::TexParameteri(
+                gles11::TEXTURE_2D,
+                gles11::TEXTURE_WRAP_T,
+                gles11::CLAMP_TO_EDGE as GLint,
+            );
+        }
     }
     unsafe fn TexSubImage2D(
         &mut self,
