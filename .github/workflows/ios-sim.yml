@@ -122,16 +122,13 @@ jobs:
           echo "Installing app..."
           xcrun simctl install "$DEV" "$APP"
           echo "Launching..."
-          xcrun simctl launch --console-pty "$DEV" org.touchhle.ios > "$GITHUB_WORKSPACE/touchHLE/run-sim.log" 2>&1 &
-          LAUNCH_PID=$!
-          echo "Waiting 25s for game to load..."
+          xcrun simctl launch "$DEV" org.touchhle.ios
+          echo "App launched, waiting 25s for game to load..."
           sleep 25
           echo "Taking screenshot..."
           xcrun simctl io "$DEV" screenshot "$GITHUB_WORKSPACE/touchHLE/sim-screenshot.png" || true
           sleep 2
           xcrun simctl io "$DEV" screenshot "$GITHUB_WORKSPACE/touchHLE/sim-screenshot-2.png" || true
-          # Kill the launched process
-          kill $LAUNCH_PID 2>/dev/null || true
           # Pull touchHLE's own log from the simulator's app container
           SIM_DATA="$HOME/Library/Developer/CoreSimulator/Devices/$DEV/data"
           echo "Looking for touchHLE log in sim container..."
@@ -143,6 +140,12 @@ jobs:
           head -100 "$GITHUB_WORKSPACE/touchHLE/sim-touchhle-internal.log" 2>/dev/null || echo "(not found)"
           echo "=== simctl launch log ==="
           cat "$GITHUB_WORKSPACE/touchHLE/run-sim.log" 2>/dev/null || echo "(empty)"
+          # Grab crash reports from the simulator
+          echo "=== Simulator crash reports ==="
+          find ~/Library/Logs/DiagnosticReports -name "*touchHLE*" -newer "$APP/touchHLE" 2>/dev/null -exec cat {} \;
+          # Also check simctl's own error output and the system log
+          echo "=== System log (touchHLE entries) ==="
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "touchHLE"' --last 2m --style compact 2>/dev/null | tail -60 || true
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
