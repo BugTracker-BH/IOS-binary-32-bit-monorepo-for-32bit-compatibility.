@@ -340,6 +340,13 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     }
 
     // Re-borrow
+    let offscreen_fb: GLuint = env
+        .framework_state
+        .core_animation
+        .composition
+        .texture_framebuffer
+        .map(|(_tex, fb)| fb)
+        .unwrap_or(0);
     let window = env.window.as_mut().unwrap();
     // The framebuffer representing the visible screen (0 on desktop, a non-zero
     // SDL FBO on iOS). Capture before borrowing the GL context.
@@ -360,6 +367,39 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         assert_eq!(gles.GetError(), 0);
     }
 
+    // === iOS diagnostic: read the center pixel of the composited offscreen
+    // texture, right before it gets blitted to the screen. This splits the bug:
+    //   - center pixel BLACK  => composition produced nothing (content problem)
+    //   - center pixel NON-BLACK => composition worked, the on-screen blit/present
+    //     is what's failing (screen FBO / SDL present problem)
+    #[cfg(target_os = "ios")]
+    {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static DIAG_N: AtomicU64 = AtomicU64::new(0);
+        let dn = DIAG_N.fetch_add(1, Ordering::Relaxed);
+        if dn < 3 || dn % 600 == 0 {
+            unsafe {
+                gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, offscreen_fb);
+                gles.Finish();
+                let mut px = [0u8; 4];
+                gles.ReadPixels(
+                    (fb_width / 2) as _,
+                    (fb_height / 2) as _,
+                    1,
+                    1,
+                    gles11::RGBA,
+                    gles11::UNSIGNED_BYTE,
+                    px.as_mut_ptr() as *mut _,
+                );
+                let rp_err = gles.GetError();
+                log!(
+                    "[compositor-diag] #{} offscreen_center_rgba={:?} rp_err=0x{:x} screen_fbo={} offscreen_fb={} fb={}x{}",
+                    dn, px, rp_err, screen_framebuffer, offscreen_fb, fb_width, fb_height
+                );
+            }
+        }
+    }
+
     // Present our rendered frame (bound to TEXTURE_2D). This copies it to the
     // screen framebuffer (0 on desktop, SDL's CAEAGLLayer FBO on iOS) so we need
     // to unbind our internal framebuffer.
@@ -372,6 +412,37 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
             present_frame_args.1,
             present_frame_args.2,
         );
+        // iOS diagnostic: read the screen framebuffer center pixel AFTER the blit
+        // but BEFORE swap. Combined with the offscreen readback above:
+        //   offscreen non-black + screen non-black + black on display
+        //        => we drew correctly but SDL is presenting a different surface
+        //   offscreen non-black + screen black
+        //        => the blit to the screen FBO itself failed (viewport/FBO)
+        #[cfg(target_os = "ios")]
+        {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static DIAG_S: AtomicU64 = AtomicU64::new(0);
+            let sn = DIAG_S.fetch_add(1, Ordering::Relaxed);
+            if sn < 3 || sn % 600 == 0 {
+                gles.Finish();
+                let (vx, vy, vw, vh) = present_frame_args.0;
+                let mut px = [0u8; 4];
+                gles.ReadPixels(
+                    (vx + vw / 2) as _,
+                    (vy + vh / 2) as _,
+                    1,
+                    1,
+                    gles11::RGBA,
+                    gles11::UNSIGNED_BYTE,
+                    px.as_mut_ptr() as *mut _,
+                );
+                let rp_err = gles.GetError();
+                log!(
+                    "[compositor-diag] #{} screen_center_rgba={:?} rp_err=0x{:x} viewport=({},{},{},{})",
+                    sn, px, rp_err, vx, vy, vw, vh
+                );
+            }
+        }
     }
     std::mem::drop(gles);
     window.swap_window();
