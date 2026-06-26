@@ -564,6 +564,25 @@ fn glBufferData(
             mem.ptr_at(data.cast::<u8>(), size.try_into().unwrap())
                 .cast()
         };
+        {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            let n = N.fetch_add(1, Ordering::Relaxed);
+            if n < 40 && !data.is_null() {
+                let fptr = data as *const f32;
+                let nf = ((size as usize) / 4).min(6);
+                let mut vals = [0f32; 6];
+                for (i, v) in vals.iter_mut().enumerate().take(nf) {
+                    *v = *fptr.add(i);
+                }
+                log!(
+                    "[diag-gl] glBufferData(target=0x{:x}, size={}, first_floats={:?})",
+                    target,
+                    size,
+                    &vals[..nf]
+                );
+            }
+        }
         gles.BufferData(target, size as HostGLsizeiptr, data, usage)
     })
 }
@@ -587,17 +606,45 @@ fn glBufferSubData(
 }
 
 // Non-pointers
+
+/// DIAGNOSTIC (temporary): rate-limited logging of guest colour calls, to find
+/// why JellyCar's textured draws come out white on iOS (current colour appears
+/// to be (0,0,0,0) under GL_MODULATE at draw time).
+fn diag_log_color(fname: &str, r: f32, g: f32, b: f32, a: f32) {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static N: AtomicU32 = AtomicU32::new(0);
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    if n < 50 {
+        log!("[diag-gl] {}({:.3}, {:.3}, {:.3}, {:.3})", fname, r, g, b, a);
+    }
+}
+
 fn glColor4f(env: &mut Environment, red: GLfloat, green: GLfloat, blue: GLfloat, alpha: GLfloat) {
+    diag_log_color("glColor4f", red, green, blue, alpha);
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Color4f(red, green, blue, alpha)
     })
 }
 fn glColor4x(env: &mut Environment, red: GLfixed, green: GLfixed, blue: GLfixed, alpha: GLfixed) {
+    diag_log_color(
+        "glColor4x",
+        red as f32 / 65536.0,
+        green as f32 / 65536.0,
+        blue as f32 / 65536.0,
+        alpha as f32 / 65536.0,
+    );
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Color4x(red, green, blue, alpha)
     })
 }
 fn glColor4ub(env: &mut Environment, red: GLubyte, green: GLubyte, blue: GLubyte, alpha: GLubyte) {
+    diag_log_color(
+        "glColor4ub",
+        red as f32 / 255.0,
+        green as f32 / 255.0,
+        blue as f32 / 255.0,
+        alpha as f32 / 255.0,
+    );
     with_ctx_and_mem(env, |gles, _mem| unsafe {
         gles.Color4ub(red, green, blue, alpha)
     })
@@ -675,6 +722,20 @@ fn glColorPointer(
     stride: GLsizei,
     pointer: ConstVoidPtr,
 ) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 30 {
+            log!(
+                "[diag-gl] glColorPointer(size={}, type=0x{:x}, stride={}, ptr_or_offset=0x{:x})",
+                size,
+                type_,
+                stride,
+                pointer.to_bits()
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pointer =
             translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
@@ -731,6 +792,30 @@ fn glDrawElements(
     indices: ConstVoidPtr,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
+        // DIAGNOSTIC (temporary): for the first textured draws, dump the live
+        // colour/array/texenv state, to find why JellyCar renders white on iOS.
+        {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
+            if tex2d {
+                let n = N.fetch_add(1, Ordering::Relaxed);
+                if n < 30 {
+                    let mut col = [0.0f32; 4];
+                    gles.GetFloatv(gles11::CURRENT_COLOR, col.as_mut_ptr());
+                    let color_arr = gles.IsEnabled(0x8076 as GLenum) != 0; // GL_COLOR_ARRAY
+                    let tc_arr = gles.IsEnabled(gles11::TEXTURE_COORD_ARRAY) != 0;
+                    let mut bound: GLint = 0;
+                    gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
+                    let mut envm: GLint = 0;
+                    gles.GetTexEnviv(gles11::TEXTURE_ENV, gles11::TEXTURE_ENV_MODE, &mut envm);
+                    log!(
+                        "[diag-draw] #{} count={} color=[{:.2},{:.2},{:.2},{:.2}] colorArr={} texcoordArr={} env=0x{:x} boundTex={}",
+                        n, count, col[0], col[1], col[2], col[3], color_arr, tc_arr, envm, bound
+                    );
+                }
+            }
+        }
         let fog_state_backup = clamp_fog_state_values(gles);
         let indices = translate_pointer_or_offset_to_host(
             gles,
