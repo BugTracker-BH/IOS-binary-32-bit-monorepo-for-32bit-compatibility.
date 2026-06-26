@@ -1,0 +1,149 @@
+name: iOS Simulator render test (touchHLE)
+on:
+  workflow_dispatch:
+env:
+  CARGO_TERM_COLOR: always
+  IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+jobs:
+  ios-sim:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: touchHLE
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch vendor dependencies
+        run: |
+          git config --global advice.detachedHead false
+          fetch_dep () {
+            rm -rf "$1"; mkdir -p "$1"; git -C "$1" init -q; git -C "$1" remote add origin "$2"
+            for i in 1 2 3 4 5; do
+              if git -C "$1" fetch --depth 1 origin "$3"; then git -C "$1" checkout -q FETCH_HEAD; return 0; fi
+              echo "retry $i for $2"; sleep 15
+            done; echo "FAILED $2"; return 1
+          }
+          fetch_dep vendor/SDL https://github.com/libsdl-org/SDL.git 07d0f51fa292895443f563f0cbde4cb3802d87fa
+          fetch_dep vendor/dynarmic https://github.com/touchHLE/dynarmic.git HEAD
+          fetch_dep vendor/openal-soft https://github.com/kcat/openal-soft HEAD
+          fetch_dep vendor/stb https://github.com/nothings/stb.git dev
+          git -C vendor/dynarmic submodule update --init --recursive --depth 1
+      - name: Restore embedded data files
+        run: |
+          mkdir -p touchHLE_apps res vendor/PVRTDecompress
+          [ -f touchHLE_apps/README.txt ] || printf 'apps dir\n' > touchHLE_apps/README.txt
+          [ -f OPTIONS_HELP.txt ] || printf 'help\n' > OPTIONS_HELP.txt
+          [ -f touchHLE_options.txt ] || : > touchHLE_options.txt
+          [ -f vendor/PVRTDecompress/LICENSE.md ] || printf 'license\n' > vendor/PVRTDecompress/LICENSE.md
+          PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQAY3Y2wAAAAAElFTkSuQmCC'
+          for p in res/icon.png res/icon_unofficial.png res/icon_preview.png; do [ -f "$p" ] || printf '%s' "$PNG" | openssl base64 -A -d > "$p"; done
+      - name: Install Boost
+        run: brew install boost && ln -sfn "$(brew --prefix boost)/include" vendor/boost
+      - name: Add Rust simulator target
+        run: rustup target add aarch64-apple-ios-sim
+      - name: Build touchHLE for iOS Simulator
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          echo "Simulator SDK: $SDK"
+          cat > "$RUNNER_TEMP/sim.cmake" <<EOF
+          set(CMAKE_SYSTEM_NAME iOS)
+          set(CMAKE_OSX_SYSROOT "$SDK" CACHE STRING "" FORCE)
+          set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "" FORCE)
+          set(CMAKE_OSX_DEPLOYMENT_TARGET "$IPHONEOS_DEPLOYMENT_TARGET" CACHE STRING "" FORCE)
+          EOF
+          export SDKROOT="$SDK"
+          export CMAKE_OSX_SYSROOT="$SDK"
+          export CMAKE_OSX_SYSROOT_aarch64_apple_ios_sim="$SDK"
+          export CMAKE_TOOLCHAIN_FILE_aarch64_apple_ios_sim="$RUNNER_TEMP/sim.cmake"
+          FW="Foundation UIKit CoreGraphics QuartzCore OpenGLES CoreVideo CoreAudio AudioToolbox AVFoundation CoreMotion GameController Metal"
+          L="-Clink-arg=-lobjc"
+          for f in $FW; do L="$L -Clink-arg=-framework -Clink-arg=$f"; done
+          export CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS="$L"
+          env "CMAKE_OSX_SYSROOT_aarch64-apple-ios-sim=$SDK" \
+              "CMAKE_TOOLCHAIN_FILE_aarch64-apple-ios-sim=$RUNNER_TEMP/sim.cmake" \
+              cargo build --release --target aarch64-apple-ios-sim --bin touchHLE 2>&1 | tee build-sim.log
+      - name: Package .app and bundle game
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/touchHLE.app"; rm -rf "$APP"; mkdir -p "$APP"
+          cp target/aarch64-apple-ios-sim/release/touchHLE "$APP/touchHLE"; chmod +x "$APP/touchHLE"
+          cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
+          cp -r touchHLE_fonts "$APP/touchHLE_fonts"
+          cp touchHLE_default_options.txt "$APP/" || true
+          GAME="$(ls "$GITHUB_WORKSPACE"/*.ipa 2>/dev/null | head -1)"
+          echo "Bundling game: $GAME"
+          if [ -n "$GAME" ] && [ -f "$GAME" ]; then
+            ( cd "$RUNNER_TEMP" && rm -rf jc && mkdir jc && cd jc && unzip -oq "$GAME" )
+            mkdir -p "$APP/touchHLE_apps"
+            cp -r "$RUNNER_TEMP"/jc/Payload/*.app "$APP/touchHLE_apps/" || true
+          fi
+          { printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
+            printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
+            printf '%s\n' '<plist version="1.0"><dict>'
+            printf '%s\n' '<key>CFBundleName</key><string>touchHLE</string>'
+            printf '%s\n' '<key>CFBundleDisplayName</key><string>touchHLE</string>'
+            printf '%s\n' '<key>CFBundleIdentifier</key><string>org.touchhle.ios</string>'
+            printf '%s\n' '<key>CFBundleExecutable</key><string>touchHLE</string>'
+            printf '%s\n' '<key>CFBundleShortVersionString</key><string>0.2.3</string>'
+            printf '%s\n' '<key>CFBundleVersion</key><string>0.2.3</string>'
+            printf '%s\n' '<key>CFBundlePackageType</key><string>APPL</string>'
+            printf '%s\n' '<key>LSRequiresIPhoneOS</key><true/>'
+            printf '%s\n' '<key>MinimumOSVersion</key><string>14.0</string>'
+            printf '%s\n' '<key>UIDeviceFamily</key><array><integer>1</integer></array>'
+            printf '%s\n' '<key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>'
+            printf '%s\n' '<key>DTPlatformName</key><string>iphonesimulator</string>'
+            printf '%s\n' '<key>UILaunchScreen</key><dict/>'
+            printf '%s\n' '</dict></plist>'
+          } > "$APP/Info.plist"
+          plutil -lint "$APP/Info.plist"
+          echo "App contents:"; ls -la "$APP/"
+      - name: Boot simulator, install, launch, screenshot
+        run: |
+          set -uo pipefail
+          APP="$RUNNER_TEMP/touchHLE.app"
+          # Find an available simulator device
+          DEV=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          for rt,devs in d['devices'].items():
+            if 'iOS' in rt:
+              for dev in devs:
+                if dev['isAvailable']:
+                  print(dev['udid']); sys.exit(0)
+          " 2>/dev/null || true)
+          if [ -z "$DEV" ]; then
+            echo "No available device found, creating one..."
+            DEV=$(xcrun simctl create touchHLE-test "iPhone 15" 2>/dev/null || xcrun simctl create touchHLE-test "iPhone 14" || true)
+          fi
+          echo "Using simulator: $DEV"
+          xcrun simctl boot "$DEV" 2>/dev/null || true
+          sleep 10
+          echo "Installing app..."
+          xcrun simctl install "$DEV" "$APP"
+          echo "Launching..."
+          xcrun simctl launch --console-pty "$DEV" org.touchhle.ios > "$GITHUB_WORKSPACE/touchHLE/run-sim.log" 2>&1 &
+          LAUNCH_PID=$!
+          echo "Waiting 25s for game to load..."
+          sleep 25
+          echo "Taking screenshot..."
+          xcrun simctl io "$DEV" screenshot "$GITHUB_WORKSPACE/touchHLE/sim-screenshot.png" || true
+          sleep 2
+          xcrun simctl io "$DEV" screenshot "$GITHUB_WORKSPACE/touchHLE/sim-screenshot-2.png" || true
+          # Kill the launched process
+          kill $LAUNCH_PID 2>/dev/null || true
+          echo "=== First 150 lines of run log ==="
+          head -150 "$GITHUB_WORKSPACE/touchHLE/run-sim.log" || true
+          echo "=== Last 30 lines ==="
+          tail -30 "$GITHUB_WORKSPACE/touchHLE/run-sim.log" || true
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: touchHLE-sim
+          path: |
+            touchHLE/sim-screenshot.png
+            touchHLE/sim-screenshot-2.png
+            touchHLE/run-sim.log
+            touchHLE/build-sim.log
+          if-no-files-found: warn
