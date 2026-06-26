@@ -56,7 +56,7 @@ jobs:
           export CMAKE_OSX_SYSROOT="$SDK"
           export CMAKE_OSX_SYSROOT_aarch64_apple_ios_sim="$SDK"
           export CMAKE_TOOLCHAIN_FILE_aarch64_apple_ios_sim="$RUNNER_TEMP/sim.cmake"
-          FW="Foundation UIKit CoreGraphics QuartzCore OpenGLES CoreVideo CoreAudio AudioToolbox AVFoundation CoreMotion GameController Metal"
+          FW="Foundation UIKit CoreGraphics QuartzCore OpenGLES CoreVideo CoreAudio AudioToolbox AVFoundation CoreMotion CoreBluetooth CoreHaptics GameController Metal"
           L="-Clink-arg=-lobjc"
           for f in $FW; do L="$L -Clink-arg=-framework -Clink-arg=$f"; done
           export CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS="$L"
