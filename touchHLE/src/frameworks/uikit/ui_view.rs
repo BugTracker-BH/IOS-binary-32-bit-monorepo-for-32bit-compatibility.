@@ -207,6 +207,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     () = msg_class![env; CATransaction setValue:value forKey:(get_static_str(env, touchHLE_kCATransactionAnimationRepeatCount))];
 }
 
++ (())setAnimationBeginsFromCurrentState:(bool)from_current_state {
+    // Controls whether a UIView block animation starts from the current
+    // (in-flight) presentation state. We don't model in-flight animation
+    // interruption, so this is a no-op; stubbing it prevents apps that call it
+    // (e.g. JellyCar) from crashing on an unrecognized selector.
+    log_dbg!("[UIView setAnimationBeginsFromCurrentState:{:?}]", from_current_state);
+}
+
 + (())setAnimationDelegate:(id)delegate {
     log_dbg!("[UIView setAnimationDelegate:{:?}]", delegate);
     retain(env, delegate);
