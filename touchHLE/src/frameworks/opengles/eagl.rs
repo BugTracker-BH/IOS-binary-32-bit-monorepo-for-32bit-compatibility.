@@ -298,15 +298,15 @@ pub const CLASSES: ClassExports = objc_classes! {
         .renderbuffer_drawable_bindings
         .borrow()
         .get(&renderbuffer) else {
-        log_dbg!("Can't present a renderbuffer {:?} not bound to a drawable!", renderbuffer);
+        log!("[ios-present] Can't present a renderbuffer {:?} not bound to a drawable!", renderbuffer);
         return false;
     };
 
     // We're presenting to the opaque CAEAGLLayer that covers the screen.
     // We can use the fast path where we skip composition and present directly.
     if drawable == fullscreen_layer {
-        log_dbg!(
-            "Layer {:?} is the fullscreen layer, presenting renderbuffer {:?} directly (fast path).",
+        log!(
+            "[ios-present] Layer {:?} is the fullscreen layer, presenting renderbuffer {:?} directly (fast path).",
             drawable,
             renderbuffer,
         );
@@ -337,8 +337,8 @@ pub const CLASSES: ClassExports = objc_classes! {
         // copied back to system RAM, and then will have to be copied to VRAM
         // again during composition. find_fullscreen_eagl_layer() exists to
         // avoid this.
-        log_dbg!(
-            "There is no fullscreen layer, presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path).",
+        log!(
+            "[ios-present] There is no fullscreen layer, presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path).",
             renderbuffer,
             drawable,
         );
@@ -517,6 +517,20 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
     pixel_buffer.clear();
     pixel_buffer.reserve_exact(size);
     let before = Instant::now();
+    // On iOS, the guest renderbuffer is rendered by the guest GL context, but
+    // this readback happens via the (shared) SDL context. Apple's GL stack is
+    // Metal-backed and does NOT implicitly synchronize a cross-context read, so
+    // without an explicit Finish glReadPixels can return stale/black pixels.
+    // This is the documented "glReadPixels is unreliable on iOS" hazard.
+    #[cfg(target_os = "ios")]
+    {
+        gles.Finish();
+        let pre_err = gles.GetError();
+        log!(
+            "[ios-present] slow-path readback: {}x{} pre_err=0x{:x}",
+            width, height, pre_err
+        );
+    }
     gles.ReadPixels(
         0,
         0,
