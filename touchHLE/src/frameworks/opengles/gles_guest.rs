@@ -558,7 +558,7 @@ fn glBufferData(
     usage: GLenum,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        let data = if data.is_null() {
+        let data: *const GLvoid = if data.is_null() {
             std::ptr::null()
         } else {
             mem.ptr_at(data.cast::<u8>(), size.try_into().unwrap())
