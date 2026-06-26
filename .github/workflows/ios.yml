@@ -90,8 +90,9 @@ jobs:
           cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
           cp -r touchHLE_fonts "$APP/touchHLE_fonts"
           cp touchHLE_default_options.txt "$APP/touchHLE_default_options.txt" || true
-          GAME_IPA="$GITHUB_WORKSPACE/JellyCar 1.0 (Decrypted).ipa"
-          if [ -f "$GAME_IPA" ]; then
+          GAME_IPA="$(ls "$GITHUB_WORKSPACE"/*.ipa 2>/dev/null | head -1)"
+          echo "Bundling game: $GAME_IPA"
+          if [ -n "$GAME_IPA" ] && [ -f "$GAME_IPA" ]; then
             ( cd "$RUNNER_TEMP" && rm -rf jc && mkdir jc && cd jc && unzip -oq "$GAME_IPA" )
             mkdir -p "$APP/touchHLE_apps"
             cp -r "$RUNNER_TEMP"/jc/Payload/*.app "$APP/touchHLE_apps/" || true
