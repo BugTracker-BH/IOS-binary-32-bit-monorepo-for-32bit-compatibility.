@@ -618,6 +618,48 @@ unsafe fn present_renderbuffer(env: &mut Environment) {
     // will go to the default framebuffer (the window).
     gles.DeleteFramebuffersOES(1, &src_framebuffer);
 
+    // === iOS: present the copied frame through the INTERNAL (on-screen) GL
+    // context, not the guest context. ===
+    //
+    // OpenGL framebuffer objects are NOT shared between contexts (only
+    // textures/renderbuffers are). The screen framebuffer (`screen_framebuffer`)
+    // is an SDL-created FBO that is only valid in SDL's internal context.
+    // Drawing it from the guest context (the desktop path below) binds the
+    // guest context's *own* FBO of that name, which is not the on-screen
+    // surface, so nothing reaches the display (black screen on iOS). `texture`
+    // holds the guest frame and IS shared across the sharegroup, so we switch
+    // to the internal context and draw it there, then swap. This also avoids
+    // glReadPixels, which is unreliable on iOS's GL-on-Metal.
+    #[cfg(target_os = "ios")]
+    {
+        // Restore the guest context's bindings we touched for the copy, so the
+        // app's subsequent rendering is unaffected.
+        gles.BindTexture(gles11::TEXTURE_2D, old_texture_2d);
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, old_framebuffer);
+        std::mem::drop(gles_boxed);
+
+        let window = env.window.as_mut().unwrap();
+        {
+            let mut internal = window.make_internal_gl_ctx_current();
+            let gi = internal.as_mut();
+            gi.BindFramebufferOES(gles11::FRAMEBUFFER_OES, screen_framebuffer);
+            gi.BindTexture(gles11::TEXTURE_2D, texture);
+            gi.Enable(gles11::TEXTURE_2D);
+            gi.Color4f(1.0, 1.0, 1.0, 1.0);
+            let tex_env_replace = [gles11::REPLACE; 1];
+            gi.TexEnviv(
+                gles11::TEXTURE_ENV,
+                gles11::TEXTURE_ENV_MODE,
+                tex_env_replace.as_ptr().cast(),
+            );
+            present_frame(gi, viewport, rotation_matrix, virtual_cursor_visible_at);
+            // texture is shared across the sharegroup, so it can be deleted here.
+            gi.DeleteTextures(1, &texture);
+        }
+        window.swap_window();
+        return;
+    }
+
     // Reset various things that could affect the quad or virtual cursor we're
     // going to draw. Back up the old state while doing so, so it can be
     // restored later. The app's subsequent drawing will be messed up if we
