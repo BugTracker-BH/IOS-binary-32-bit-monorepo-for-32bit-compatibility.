@@ -256,6 +256,216 @@ unsafe fn ios_dump_view_hierarchy(tag: &str) {
     dump_view(key_window, 0, tag);
 }
 
+// ============================================================================
+// iOS native CoreAnimation presenter.
+//
+// On iOS the OpenGL ES / EAGL `presentRenderbuffer:` path does NOT reach the
+// display (confirmed on device + simulator: the presented renderbuffer holds
+// the correct frame, the CAEAGLLayer is visible with contents, yet the screen
+// stays black). OpenGL ES is deprecated on iOS and SDL's CAEAGLLayer present is
+// not being composited by the render server.
+//
+// Instead we present the finished frame through plain CoreAnimation, which is
+// guaranteed to composite: each frame we wrap the composited pixels in a
+// CGImage and assign it to the `contents` of an overlay CALayer placed on top
+// of the window. The contents update is marshalled to the main thread.
+// ============================================================================
+
+#[cfg(target_os = "ios")]
+static OVERLAY_LAYER: std::sync::atomic::AtomicPtr<std::os::raw::c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
+#[cfg(target_os = "ios")]
+#[repr(C)]
+struct PresentPayload {
+    /// malloc'd RGBA8 buffer, top-left origin (already vertically flipped).
+    buf: *mut std::os::raw::c_void,
+    w: usize,
+    h: usize,
+}
+
+/// CGDataProvider release callback: frees the malloc'd pixel buffer once the
+/// CGImage (and thus the layer contents) that owns it is released.
+#[cfg(target_os = "ios")]
+extern "C" fn present_dataprovider_release(
+    _info: *mut std::os::raw::c_void,
+    data: *const std::os::raw::c_void,
+    _size: usize,
+) {
+    unsafe { libc::free(data as *mut std::os::raw::c_void) };
+}
+
+/// Runs on the main thread (via dispatch_async_f). Builds a CGImage from the
+/// payload and assigns it to the overlay layer's contents, creating the overlay
+/// layer on first use.
+#[cfg(target_os = "ios")]
+extern "C" fn present_on_main(ctx: *mut std::os::raw::c_void) {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_void};
+    use std::sync::atomic::Ordering;
+    type Id = *mut c_void;
+
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn objc_msgSend();
+        fn CGColorSpaceCreateDeviceRGB() -> Id;
+        fn CGColorSpaceRelease(space: Id);
+        fn CGDataProviderCreateWithData(
+            info: *mut c_void,
+            data: *const c_void,
+            size: usize,
+            release: extern "C" fn(*mut c_void, *const c_void, usize),
+        ) -> Id;
+        fn CGDataProviderRelease(p: Id);
+        fn CGImageCreate(
+            width: usize,
+            height: usize,
+            bits_per_component: usize,
+            bits_per_pixel: usize,
+            bytes_per_row: usize,
+            space: Id,
+            bitmap_info: u32,
+            provider: Id,
+            decode: *const f64,
+            should_interpolate: bool,
+            intent: i32,
+        ) -> Id;
+        fn CGImageRelease(img: Id);
+        static kCAGravityResizeAspect: Id;
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct RectRaw {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+
+    unsafe fn sel(name: &str) -> *mut c_void {
+        sel_registerName(CString::new(name).unwrap().as_ptr())
+    }
+    unsafe fn cls(name: &str) -> Id {
+        objc_getClass(CString::new(name).unwrap().as_ptr())
+    }
+    // obj.selector()
+    unsafe fn msg0(obj: Id, selector: *mut c_void) -> Id {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector)
+    }
+    // obj.selector(arg) where arg is an object pointer
+    unsafe fn msg1(obj: Id, selector: *mut c_void, arg: Id) -> Id {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, *mut c_void, Id) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector, arg)
+    }
+
+    if ctx.is_null() {
+        return;
+    }
+    let payload = unsafe { Box::from_raw(ctx as *mut PresentPayload) };
+    if payload.buf.is_null() {
+        return;
+    }
+
+    unsafe {
+        // Build the CGImage. The provider takes ownership of payload.buf and
+        // frees it via present_dataprovider_release when released.
+        let space = CGColorSpaceCreateDeviceRGB();
+        let provider = CGDataProviderCreateWithData(
+            std::ptr::null_mut(),
+            payload.buf,
+            payload.w * payload.h * 4,
+            present_dataprovider_release,
+        );
+        const KCG_ALPHA_NONE_SKIP_LAST: u32 = 5; // kCGImageAlphaNoneSkipLast
+        let img = CGImageCreate(
+            payload.w,
+            payload.h,
+            8,
+            32,
+            payload.w * 4,
+            space,
+            KCG_ALPHA_NONE_SKIP_LAST,
+            provider,
+            std::ptr::null(),
+            false,
+            0,
+        );
+
+        // Locate the key window's root layer.
+        let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+        let mut key_window = msg0(app, sel("keyWindow"));
+        if key_window.is_null() {
+            let windows = msg0(app, sel("windows"));
+            let count: usize = {
+                let f: extern "C" fn(Id, *mut c_void) -> usize =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(windows, sel("count"))
+            };
+            if count > 0 {
+                let f: extern "C" fn(Id, *mut c_void, usize) -> Id =
+                    std::mem::transmute(objc_msgSend as *const ());
+                key_window = f(windows, sel("objectAtIndex:"), 0);
+            }
+        }
+        let window_layer = msg0(key_window, sel("layer"));
+
+        // Create the overlay layer on first use.
+        let mut overlay = OVERLAY_LAYER.load(Ordering::Relaxed);
+        if overlay.is_null() && !window_layer.is_null() {
+            let new_layer = msg0(cls("CALayer"), sel("layer"));
+            let new_layer = msg0(new_layer, sel("retain"));
+            let bounds: RectRaw = {
+                let f: extern "C" fn(Id, *mut c_void) -> RectRaw =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(window_layer, sel("bounds"))
+            };
+            {
+                let f: extern "C" fn(Id, *mut c_void, RectRaw) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(new_layer, sel("setFrame:"), bounds);
+            }
+            msg1(new_layer, sel("setContentsGravity:"), kCAGravityResizeAspect);
+            {
+                let f: extern "C" fn(Id, *mut c_void, f64) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(new_layer, sel("setZPosition:"), 10000.0);
+            }
+            msg1(window_layer, sel("addSublayer:"), new_layer);
+            OVERLAY_LAYER.store(new_layer, Ordering::Relaxed);
+            overlay = new_layer;
+        }
+
+        if !overlay.is_null() {
+            // Assign contents without the implicit fade animation.
+            let ct = cls("CATransaction");
+            msg0(ct, sel("begin"));
+            {
+                let f: extern "C" fn(Id, *mut c_void, i8) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(ct, sel("setDisableActions:"), 1);
+            }
+            msg1(overlay, sel("setContents:"), img);
+            msg0(ct, sel("commit"));
+        }
+
+        CGImageRelease(img);
+        CGDataProviderRelease(provider);
+        CGColorSpaceRelease(space);
+    }
+    drop(payload);
+}
+
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.
@@ -1512,6 +1722,52 @@ impl Window {
 
         // hold onto GL context so the image doesn't disappear, and hold
         // onto image so we can rotate later if necessary
+    }
+
+    /// iOS only: present an already-composited RGBA8 frame (origin bottom-left,
+    /// as produced by glReadPixels) to the screen via CoreAnimation, bypassing
+    /// the broken OpenGL ES / EAGL present path. The frame is vertically flipped
+    /// into a fresh buffer and handed to the main thread, which wraps it in a
+    /// CGImage and assigns it to an overlay CALayer's contents.
+    #[cfg(target_os = "ios")]
+    pub fn present_frame_to_calayer(&self, pixels: &[u8], w: u32, h: u32) {
+        use std::os::raw::c_void;
+        let (w, h) = (w as usize, h as usize);
+        let n = w * h * 4;
+        if n == 0 || pixels.len() < n {
+            return;
+        }
+        extern "C" {
+            static _dispatch_main_q: c_void;
+            fn dispatch_async_f(
+                queue: *const c_void,
+                context: *mut c_void,
+                work: extern "C" fn(*mut c_void),
+            );
+        }
+        unsafe {
+            let buf = libc::malloc(n) as *mut u8;
+            if buf.is_null() {
+                return;
+            }
+            // glReadPixels rows are bottom-to-top; CGImage expects top-to-bottom.
+            let row = w * 4;
+            for y in 0..h {
+                let src_off = (h - 1 - y) * row;
+                std::ptr::copy_nonoverlapping(pixels.as_ptr().add(src_off), buf.add(y * row), row);
+            }
+            let payload = Box::new(PresentPayload {
+                buf: buf as *mut c_void,
+                w,
+                h,
+            });
+            let ctx = Box::into_raw(payload) as *mut c_void;
+            dispatch_async_f(
+                &_dispatch_main_q as *const c_void,
+                ctx,
+                present_on_main,
+            );
+        }
     }
 
     /// Swap front-buffer and back-buffer so the result of OpenGL rendering is

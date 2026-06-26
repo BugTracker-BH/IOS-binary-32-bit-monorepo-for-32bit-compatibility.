@@ -491,8 +491,34 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
             }
         }
     }
+    // iOS: the OpenGL ES / EAGL present path does not reach the display, so in
+    // addition to the (ineffective) GL swap we read the composited frame back
+    // and present it through CoreAnimation, which is guaranteed to composite.
+    #[cfg(target_os = "ios")]
+    let ios_frame: Option<Vec<u8>> = unsafe {
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, offscreen_fb);
+        gles.Finish();
+        let n = (fb_width as usize) * (fb_height as usize) * 4;
+        let mut v = vec![0u8; n];
+        gles.ReadPixels(
+            0,
+            0,
+            fb_width as _,
+            fb_height as _,
+            gles11::RGBA,
+            gles11::UNSIGNED_BYTE,
+            v.as_mut_ptr() as *mut _,
+        );
+        Some(v)
+    };
+
     std::mem::drop(gles);
     window.swap_window();
+
+    #[cfg(target_os = "ios")]
+    if let Some(frame) = ios_frame {
+        window.present_frame_to_calayer(&frame, fb_width, fb_height);
+    }
 
     animation_state.update_started_and_finished_animations(env);
 
