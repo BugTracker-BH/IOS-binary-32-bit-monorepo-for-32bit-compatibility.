@@ -132,10 +132,17 @@ jobs:
           xcrun simctl io "$DEV" screenshot "$GITHUB_WORKSPACE/touchHLE/sim-screenshot-2.png" || true
           # Kill the launched process
           kill $LAUNCH_PID 2>/dev/null || true
-          echo "=== First 150 lines of run log ==="
-          head -150 "$GITHUB_WORKSPACE/touchHLE/run-sim.log" || true
-          echo "=== Last 30 lines ==="
-          tail -30 "$GITHUB_WORKSPACE/touchHLE/run-sim.log" || true
+          # Pull touchHLE's own log from the simulator's app container
+          SIM_DATA="$HOME/Library/Developer/CoreSimulator/Devices/$DEV/data"
+          echo "Looking for touchHLE log in sim container..."
+          find "$SIM_DATA" -name "touchHLE-ios.log" -exec cp {} "$GITHUB_WORKSPACE/touchHLE/sim-touchhle.log" \; 2>/dev/null
+          find "$SIM_DATA" -name "touchHLE_log.txt" -exec cp {} "$GITHUB_WORKSPACE/touchHLE/sim-touchhle-internal.log" \; 2>/dev/null
+          echo "=== touchHLE iOS log ==="
+          cat "$GITHUB_WORKSPACE/touchHLE/sim-touchhle.log" 2>/dev/null || echo "(not found)"
+          echo "=== touchHLE internal log (first 100 lines) ==="
+          head -100 "$GITHUB_WORKSPACE/touchHLE/sim-touchhle-internal.log" 2>/dev/null || echo "(not found)"
+          echo "=== simctl launch log ==="
+          cat "$GITHUB_WORKSPACE/touchHLE/run-sim.log" 2>/dev/null || echo "(empty)"
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -146,4 +153,6 @@ jobs:
             touchHLE/sim-screenshot-2.png
             touchHLE/run-sim.log
             touchHLE/build-sim.log
+            touchHLE/sim-touchhle.log
+            touchHLE/sim-touchhle-internal.log
           if-no-files-found: warn
