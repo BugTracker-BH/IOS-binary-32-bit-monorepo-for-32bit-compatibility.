@@ -491,33 +491,50 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
             }
         }
     }
-    // iOS: the OpenGL ES / EAGL present path does not reach the display, so in
-    // addition to the (ineffective) GL swap we read the composited frame back
-    // and present it through CoreAnimation, which is guaranteed to composite.
+    // iOS: the OpenGL ES / EAGL present path does not reach the display, so we
+    // read the rendered frame back and present it through CoreAnimation, which
+    // is guaranteed to composite.
+    //
+    // Crucially we read back the SCREEN framebuffer (which the present_frame()
+    // call above has just filled) rather than the raw offscreen. present_frame()
+    // clears the whole screen FBO to black and draws the frame into the viewport
+    // with the device rotation_matrix applied, so the screen FBO already holds
+    // the correctly oriented, viewport-placed, black-letterboxed image. Reading
+    // the raw offscreen instead would drop rotation + viewport, so a landscape
+    // game would appear sideways/mis-placed and — because the input transform
+    // (transform_input_coords) maps touches using exactly this viewport +
+    // rotation — every touch would land in the wrong place or be discarded.
+    // Reusing present_frame()'s output keeps display and input in the same frame
+    // with no rotation math here.
     #[cfg(target_os = "ios")]
-    let ios_frame: Option<Vec<u8>> = unsafe {
-        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, offscreen_fb);
+    let ios_frame: Option<(Vec<u8>, u32, u32)> = unsafe {
+        // Derive the full screen size from the viewport present_frame() used:
+        // x = (screen_w - scaled_w)/2, so screen_w = scaled_w + 2*x (likewise y).
+        let (vx, vy, vw, vh) = present_frame_args.0;
+        let screen_w = vw + 2 * vx;
+        let screen_h = vh + 2 * vy;
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, screen_framebuffer);
         gles.Finish();
-        let n = (fb_width as usize) * (fb_height as usize) * 4;
+        let n = (screen_w as usize) * (screen_h as usize) * 4;
         let mut v = vec![0u8; n];
         gles.ReadPixels(
             0,
             0,
-            fb_width as _,
-            fb_height as _,
+            screen_w as _,
+            screen_h as _,
             gles11::RGBA,
             gles11::UNSIGNED_BYTE,
             v.as_mut_ptr() as *mut _,
         );
-        Some(v)
+        Some((v, screen_w, screen_h))
     };
 
     std::mem::drop(gles);
     window.swap_window();
 
     #[cfg(target_os = "ios")]
-    if let Some(frame) = ios_frame {
-        window.present_frame_to_calayer(&frame, fb_width, fb_height);
+    if let Some((frame, w, h)) = ios_frame {
+        window.present_frame_to_calayer(&frame, w, h);
     }
 
     animation_state.update_started_and_finished_animations(env);
