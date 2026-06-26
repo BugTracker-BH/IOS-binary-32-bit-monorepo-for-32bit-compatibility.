@@ -72,7 +72,7 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
 
     if find_fullscreen_eagl_layer(env) != nil {
         // No composition done, EAGLContext will present directly.
-        log_dbg!("Using CAEAGLLayer fast path, skipping composition");
+        log!("[compositor] SKIPPING: fullscreen EAGL layer detected, expecting EAGL fast-path present");
         return None;
     }
 
