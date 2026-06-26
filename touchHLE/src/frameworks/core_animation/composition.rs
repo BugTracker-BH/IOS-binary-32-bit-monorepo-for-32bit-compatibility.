@@ -24,6 +24,15 @@ use crate::matrix::Matrix;
 use crate::mem::SafeWrite;
 use crate::objc::{id, msg, msg_class, nil, ObjC};
 use crate::Environment;
+
+/// iOS only: SDL can recreate its UIView (and thus its drawable framebuffer)
+/// shortly after window creation. The framebuffer we captured at startup then
+/// becomes orphaned: we render into it correctly, but SDL presents the *new*
+/// live renderbuffer, so the screen stays black. We re-capture SDL's current
+/// drawable framebuffer on the first composite and present into that instead.
+#[cfg(target_os = "ios")]
+static LIVE_SCREEN_FBO: std::sync::atomic::AtomicU32 =
+    std::sync::atomic::AtomicU32::new(u32::MAX);
 use std::time::{Duration, Instant};
 
 #[derive(Default)]
@@ -151,6 +160,32 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
 
     let window = env.window.as_mut().unwrap();
     let mut gles = window.make_internal_gl_ctx_current();
+
+    // iOS: on the first composite (before we bind any framebuffer of our own),
+    // whatever framebuffer is currently bound must be SDL's live drawable FBO.
+    // Capture it, because the value cached at window creation may be stale after
+    // SDL recreated its view (orphaned FBO -> correct pixels, black screen).
+    #[cfg(target_os = "ios")]
+    {
+        use std::sync::atomic::Ordering;
+        if env
+            .framework_state
+            .core_animation
+            .composition
+            .texture_framebuffer
+            .is_none()
+        {
+            let mut fb: i32 = 0;
+            unsafe {
+                gles.GetIntegerv(gles11::FRAMEBUFFER_BINDING_OES, &mut fb);
+            }
+            LIVE_SCREEN_FBO.store(fb.max(0) as u32, Ordering::Relaxed);
+            log!(
+                "[compositor-diag] captured live SDL screen fbo = {}",
+                fb.max(0)
+            );
+        }
+    }
 
     // Set up GL objects needed for render-to-texture. We could draw directly
     // to the screen instead, but this way we can reuse the code for scaling and
@@ -350,7 +385,19 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     let window = env.window.as_mut().unwrap();
     // The framebuffer representing the visible screen (0 on desktop, a non-zero
     // SDL FBO on iOS). Capture before borrowing the GL context.
+    #[cfg(not(target_os = "ios"))]
     let screen_framebuffer = window.gl_default_framebuffer();
+    // iOS: prefer SDL's live drawable FBO captured this session over the value
+    // cached at window creation (which goes stale if SDL recreated its view).
+    #[cfg(target_os = "ios")]
+    let screen_framebuffer = {
+        let live = LIVE_SCREEN_FBO.load(std::sync::atomic::Ordering::Relaxed);
+        if live == u32::MAX {
+            window.gl_default_framebuffer()
+        } else {
+            live
+        }
+    };
     let mut gles = window.make_internal_gl_ctx_current();
 
     // Clean up some GL state
