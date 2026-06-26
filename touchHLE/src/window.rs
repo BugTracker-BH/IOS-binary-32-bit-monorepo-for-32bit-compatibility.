@@ -118,6 +118,7 @@ unsafe fn ios_dump_view_hierarchy(tag: &str) {
         fn objc_getClass(name: *const c_char) -> Id;
         fn sel_registerName(name: *const c_char) -> *mut c_void;
         fn objc_msgSend();
+        fn object_getClassName(obj: Id) -> *const c_char;
     }
     unsafe fn sel(name: &str) -> *mut c_void {
         sel_registerName(CString::new(name).unwrap().as_ptr())
@@ -152,6 +153,77 @@ unsafe fn ios_dump_view_hierarchy(tag: &str) {
             std::mem::transmute(objc_msgSend as *const ());
         f(obj, sel(selector))
     }
+    // CGFloat obj.selector()
+    unsafe fn msg_f64(obj: Id, selector: &str) -> f64 {
+        if obj.is_null() {
+            return f64::NAN;
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> f64 =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel(selector))
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct RectRaw {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+    // CGRect obj.selector()  (arm64 returns the 32-byte struct via x8/sret)
+    unsafe fn msg_rect(obj: Id, selector: &str) -> RectRaw {
+        if obj.is_null() {
+            return RectRaw { x: 0.0, y: 0.0, w: 0.0, h: 0.0 };
+        }
+        let f: extern "C" fn(Id, *mut c_void) -> RectRaw =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(obj, sel(selector))
+    }
+    unsafe fn at_index(arr: Id, i: usize) -> Id {
+        if arr.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, *mut c_void, usize) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(arr, sel("objectAtIndex:"), i)
+    }
+    unsafe fn cls_name(obj: Id) -> String {
+        if obj.is_null() {
+            return "(nil)".to_string();
+        }
+        let p = object_getClassName(obj);
+        if p.is_null() {
+            return "(?)".to_string();
+        }
+        std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned()
+    }
+    // Recursively log a UIView subtree: class, frame, hidden, alpha, opaque, and
+    // whether its layer has CGImage contents. An opaque non-hidden view that
+    // covers the GL view is exactly what would produce a black screen while our
+    // framebuffer readback shows correct pixels.
+    unsafe fn dump_view(view: Id, depth: usize, tag: &str) {
+        if view.is_null() || depth > 8 {
+            return;
+        }
+        let name = cls_name(view);
+        let frame = msg_rect(view, "frame");
+        let hidden = msg_i8(view, "isHidden");
+        let alpha = msg_f64(view, "alpha");
+        let opaque = msg_i8(view, "isOpaque");
+        let layer = msg(view, "layer");
+        let contents = msg(layer, "contents");
+        let bg = msg(view, "backgroundColor");
+        let indent = "  ".repeat(depth);
+        log!(
+            "[diag-tree] {} {}{} frame=({:.0},{:.0},{:.0},{:.0}) hidden={} alpha={:.2} opaque={} layer={:?} contents={:?} bg={:?}",
+            tag, indent, name, frame.x, frame.y, frame.w, frame.h, hidden, alpha, opaque, layer, contents, bg
+        );
+        let subs = msg(view, "subviews");
+        let n = msg_uint(subs, "count");
+        for i in 0..n {
+            dump_view(at_index(subs, i), depth + 1, tag);
+        }
+    }
 
     let app = msg(class("UIApplication"), "sharedApplication");
     let mut key_window = msg(app, "keyWindow");
@@ -178,6 +250,10 @@ unsafe fn ios_dump_view_hierarchy(tag: &str) {
         "[diag-objc] {}: keyWindow={:?} isKey={} hidden={} rootVC={:?} rootView={:?} rootView.window={:?} rootView.subviews={}",
         tag, key_window, is_key, hidden, root_vc, root_view, root_view_window, subview_count
     );
+    // Full recursive dump of the key window's view subtree. Look for an opaque,
+    // non-hidden view drawn ON TOP of (i.e. after) SDL's GL view that would hide
+    // the GL output.
+    dump_view(key_window, 0, tag);
 }
 
 /// Tell SDL2 what orientation we want. Only useful on Android.
