@@ -16,9 +16,7 @@ use crate::frameworks::core_graphics::cg_image::{self, kCGImageAlphaPremultiplie
 use crate::frameworks::core_graphics::{CGFloat, CGPoint, CGRect, CGSize};
 use crate::frameworks::foundation::ns_run_loop::run_run_loop_single_iteration;
 use crate::frameworks::foundation::ns_string;
-use crate::frameworks::uikit::ui_font::{
-    UITextAlignmentCenter, UITextAlignmentLeft, UITextAlignmentRight,
-};
+use crate::frameworks::uikit::ui_font::{UITextAlignmentCenter, UITextAlignmentRight};
 use crate::frameworks::uikit::ui_graphics::{UIGraphicsPopContext, UIGraphicsPushContext};
 use crate::frameworks::uikit::ui_view::ui_control::ui_button::{
     UIButtonTypeCustom, UIButtonTypeRoundedRect,

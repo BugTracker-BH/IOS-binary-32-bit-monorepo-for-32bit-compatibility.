@@ -610,13 +610,13 @@ mod ios_ipa_picker {
             return;
         }
         if let Some(path) = ns_to_string(msg0(url, sel("path"))) {
-            crate::log!("[ios] Files picker selected: {}", path);
+            eprintln!("[ios] Files picker selected: {}", path);
             match import_ipa(Path::new(&path)) {
                 Some(app_path) => {
-                    crate::log!("[ios] Imported app: {}", app_path.display());
+                    eprintln!("[ios] Imported app: {}", app_path.display());
                     *IMPORTED_APP_PATH.lock().unwrap() = Some(app_path);
                 }
-                None => crate::log!("[ios] Import failed (no Payload/*.app in the chosen file?)"),
+                None => eprintln!("[ios] Import failed (no Payload/*.app in the chosen file?)"),
             }
         }
     }
