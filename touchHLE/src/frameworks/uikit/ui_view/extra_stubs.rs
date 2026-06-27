@@ -63,23 +63,4 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 @end
 
-// iSimulate dev-tool SDK (streams accelerometer/GPS/multitouch from a device
-// into the iOS Simulator). Useless in touchHLE and referenced by name in a nib,
-// so we register an empty stub whose factory methods return nil — the tool stays
-// disabled and the game proceeds.
-@implementation iSimulate: NSObject
-+ (id)sharedInstance {
-    nil
-}
-+ (id)sharedInstanceWithMainView:(id)_view {
-    nil
-}
-+ (id)sharedInstanceWithApplication:(id)_application {
-    nil
-}
-- (())run {}
-- (())start {}
-- (())stop {}
-@end
-
 };

@@ -458,14 +458,7 @@ fn substitute_classes(
     // Naturally it makes a lot of use of UIKit and networking in ways we
     // don't support yet. This isn't "ad blocking" because ads no longer work
     // on real devices anyway :)
-    if !(name.starts_with("AdMob")
-        || name.starts_with("AltAds")
-        || name.starts_with("Mobclix")
-        || name.starts_with("FB") // Facebook
-        || name.starts_with("Flurry")
-        || name.starts_with("OpenFeint")
-        || name.starts_with("Tapjoy"))
-    {
+    if !class_name_should_be_faked(name) {
         return None;
     }
 
@@ -493,6 +486,22 @@ fn substitute_classes(
         is_metaclass: true,
     });
     Some((class_host_object, metaclass_host_object))
+}
+
+/// Names of problematic third-party SDK classes (ad networks, dev tools) that
+/// touchHLE replaces with a do-nothing fake class — covering both classes the
+/// app defines itself and ones it only references (e.g. via a nib), so their
+/// arbitrary selectors are absorbed as no-ops instead of crashing.
+fn class_name_should_be_faked(name: &str) -> bool {
+    name.starts_with("AdMob")
+        || name.starts_with("AltAds")
+        || name.starts_with("Mobclix")
+        || name.starts_with("FB") // Facebook
+        || name.starts_with("Flurry")
+        || name.starts_with("OpenFeint")
+        || name.starts_with("Tapjoy")
+        || name.starts_with("AdWhirl")
+        || name.starts_with("iSimulate")
 }
 
 impl ObjC {
@@ -582,20 +591,39 @@ impl ObjC {
             ));
         } else {
             if !use_placeholder {
-                panic!("Missing implementation for class {name}!");
+                // Before panicking, check if this is a known problematic SDK
+                // class. If so, fake it (absorbs all selectors as no-ops)
+                // rather than crashing — this handles classes that are only
+                // referenced by name in nibs or at runtime, not statically
+                // linked from the binary.
+                if class_name_should_be_faked(name) {
+                    log!(
+                        "Note: creating fake class for missing {:?} to improve compatibility",
+                        name
+                    );
+                    class_host_object = Box::new(FakeClass {
+                        name: name.to_string(),
+                        is_metaclass: false,
+                    });
+                    metaclass_host_object = Box::new(FakeClass {
+                        name: name.to_string(),
+                        is_metaclass: true,
+                    });
+                } else {
+                    panic!("Missing implementation for class {name}!");
+                }
+            } else {
+                // We don't have a real implementation for this class, use a
+                // placeholder.
+                class_host_object = Box::new(UnimplementedClass {
+                    name: name.to_string(),
+                    is_metaclass: false,
+                });
+                metaclass_host_object = Box::new(UnimplementedClass {
+                    name: name.to_string(),
+                    is_metaclass: true,
+                });
             }
-
-            // We don't have a real implementation for this class, use a
-            // placeholder.
-
-            class_host_object = Box::new(UnimplementedClass {
-                name: name.to_string(),
-                is_metaclass: false,
-            });
-            metaclass_host_object = Box::new(UnimplementedClass {
-                name: name.to_string(),
-                is_metaclass: true,
-            });
         }
 
         // NSObject's metaclass is special: it is its own metaclass, and it's
