@@ -1541,6 +1541,7 @@ impl Environment {
         }
 
         if self.gdb_server.is_none() {
+            crate::objc::dump_msg_ring();
             panic!("Error during CPU execution: {error:?}");
         }
 

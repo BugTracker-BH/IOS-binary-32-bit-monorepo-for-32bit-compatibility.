@@ -27,6 +27,36 @@ use crate::objc::classes::InitializationStatus;
 use crate::Environment;
 use std::any::TypeId;
 
+// --- Message ring buffer for crash diagnostics ---
+// Records the last N objc messages dispatched, so when a MemoryError crash
+// occurs we can dump the call chain that led to it (identifies which FakeClass
+// method returned nil and caused a cascading null dereference).
+const MSG_RING_SIZE: usize = 32;
+struct MsgRing {
+    buf: [Option<(String, String)>; MSG_RING_SIZE],
+    pos: usize,
+}
+thread_local! {
+    static MSG_RING: std::cell::RefCell<MsgRing> = std::cell::RefCell::new(MsgRing {
+        buf: std::array::from_fn(|_| None),
+        pos: 0,
+    });
+}
+/// Dump the last N objc messages dispatched (for crash diagnostics).
+pub fn dump_msg_ring() {
+    MSG_RING.with(|ring| {
+        let r = ring.borrow();
+        eprintln!("=== Last {} objc messages before crash ===", MSG_RING_SIZE);
+        for i in 0..MSG_RING_SIZE {
+            let idx = (r.pos + i) % MSG_RING_SIZE;
+            if let Some((ref cls, ref sel)) = r.buf[idx] {
+                eprintln!("  [{}] -{} {}", MSG_RING_SIZE - 1 - (MSG_RING_SIZE - 1 - i), cls, sel);
+            }
+        }
+        eprintln!("=== end ===");
+    });
+}
+
 pub(super) struct ThreadInitializer {
     mutex: MutPtr<pthread_mutex_t>,
     cond: MutPtr<pthread_cond_t>,
@@ -177,6 +207,32 @@ fn objc_msgSend_inner(
     tolerate_type_mismatch: bool,
     skip_initialize: bool,
 ) {
+    // Record this message in the ring buffer for crash diagnostics.
+    {
+        let class_name = if receiver == nil {
+            "(nil)".to_string()
+        } else {
+            let isa = ObjC::read_isa(receiver, &env.mem);
+            env.objc
+                .get_host_object(isa)
+                .and_then(|ho| ho.as_any().downcast_ref::<super::ClassHostObject>())
+                .map(|c| c.name.clone())
+                .or_else(|| {
+                    env.objc
+                        .get_host_object(isa)
+                        .and_then(|ho| ho.as_any().downcast_ref::<super::FakeClass>())
+                        .map(|f| format!("[FAKE]{}", f.name))
+                })
+                .unwrap_or_else(|| format!("?@{:?}", receiver))
+        };
+        let sel_name = selector.as_str(&env.mem).to_string();
+        MSG_RING.with(|ring| {
+            let mut r = ring.borrow_mut();
+            r.buf[r.pos] = Some((class_name, sel_name));
+            r.pos = (r.pos + 1) % r.buf.len();
+        });
+    }
+
     log_dbg!(
         "Dispatching {} for {:?}",
         selector.as_str(&env.mem),
