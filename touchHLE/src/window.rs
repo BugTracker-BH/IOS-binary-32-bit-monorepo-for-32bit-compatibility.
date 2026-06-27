@@ -106,6 +106,107 @@ fn rotate_fullscreen_size(orientation: DeviceOrientation, screen_size: (u32, u32
     }
 }
 
+/// iOS-only: log the real UIKit orientation state (screen/window bounds, the
+/// current interface orientation, and the root view controller's
+/// `supportedInterfaceOrientations` mask + `shouldAutorotate`). This pinpoints
+/// why the app isn't rotating to landscape: if SDL's VC mask doesn't include the
+/// landscape bits, iOS will never rotate regardless of our hint. Must be called
+/// on the main thread.
+///
+/// UIInterfaceOrientation: 1=Portrait 2=PortraitUpsideDown 3=LandscapeRight
+/// 4=LandscapeLeft. Mask bits: Portrait=2 LandscapeRight=8 LandscapeLeft=16
+/// (Landscape=24, AllButUpsideDown=26).
+#[cfg(target_os = "ios")]
+unsafe fn ios_dump_orientation(tag: &str) {
+    use std::ffi::{CStr, CString};
+    use std::os::raw::{c_char, c_void};
+    type Id = *mut c_void;
+    type Sel = *mut c_void;
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Sel;
+        fn objc_msgSend();
+        fn object_getClassName(obj: Id) -> *const c_char;
+    }
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct R {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+    unsafe fn sel(s: &str) -> Sel {
+        sel_registerName(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn cls(s: &str) -> Id {
+        objc_getClass(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn msg0(o: Id, s: Sel) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn rectof(o: Id, s: Sel) -> R {
+        if o.is_null() {
+            return R { x: 0.0, y: 0.0, w: 0.0, h: 0.0 };
+        }
+        let f: extern "C" fn(Id, Sel) -> R = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn intof(o: Id, s: Sel) -> i64 {
+        if o.is_null() {
+            return -1;
+        }
+        let f: extern "C" fn(Id, Sel) -> i64 = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn boolof(o: Id, s: Sel) -> bool {
+        if o.is_null() {
+            return false;
+        }
+        let f: extern "C" fn(Id, Sel) -> bool = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn clsname(o: Id) -> String {
+        if o.is_null() {
+            return "nil".to_string();
+        }
+        let p = object_getClassName(o);
+        if p.is_null() {
+            return "?".to_string();
+        }
+        CStr::from_ptr(p).to_string_lossy().into_owned()
+    }
+
+    let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+    let screen = msg0(cls("UIScreen"), sel("mainScreen"));
+    let sb = rectof(screen, sel("bounds"));
+    let mut key = msg0(app, sel("keyWindow"));
+    if key.is_null() {
+        let windows = msg0(app, sel("windows"));
+        let count = intof(windows, sel("count"));
+        if count > 0 {
+            let f: extern "C" fn(Id, Sel, i64) -> Id =
+                std::mem::transmute(objc_msgSend as *const ());
+            key = f(windows, sel("objectAtIndex:"), 0);
+        }
+    }
+    let wb = rectof(key, sel("bounds"));
+    let status_orient = intof(app, sel("statusBarOrientation"));
+    let root = msg0(key, sel("rootViewController"));
+    let root_name = clsname(root);
+    let supported = intof(root, sel("supportedInterfaceOrientations"));
+    let autorotate = boolof(root, sel("shouldAutorotate"));
+
+    log!(
+        "[diag-orient] {}: screen={}x{} keyWindow={}x{} statusBarOrient={} rootVC={} supportedMask={} shouldAutorotate={}",
+        tag, sb.w, sb.h, wb.w, wb.h, status_orient, root_name, supported, autorotate
+    );
+}
+
 /// iOS-only: introspect the live UIKit view hierarchy via the Objective-C
 /// runtime and log it, to diagnose why SDL's GL view (a CAEAGLLayer) is not
 /// being composited to the screen. Must be called on the main thread.
@@ -804,16 +905,109 @@ pub fn ios_take_imported_app() -> Option<std::path::PathBuf> {
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.
-    sdl2::hint::set(
-        "SDL_IOS_ORIENTATIONS",
-        match orientation {
-            DeviceOrientation::Portrait => "Portrait",
-            // The inversion is deliberate. These probably correspond to
-            // iPhone OS content orientations?
-            DeviceOrientation::PortraitUpsideDown => "PortraitUpsideDown",
-            DeviceOrientation::LandscapeLeft => "LandscapeRight",
-            DeviceOrientation::LandscapeRight => "LandscapeLeft",
-        },
+    let value = match orientation {
+        DeviceOrientation::Portrait => "Portrait",
+        // The inversion is deliberate. These probably correspond to
+        // iPhone OS content orientations?
+        DeviceOrientation::PortraitUpsideDown => "PortraitUpsideDown",
+        DeviceOrientation::LandscapeLeft => "LandscapeRight",
+        DeviceOrientation::LandscapeRight => "LandscapeLeft",
+    };
+    log!(
+        "[diag-orient] set_sdl2_orientation: SDL_IOS_ORIENTATIONS={:?} (orientation={:?})",
+        value,
+        orientation
+    );
+    sdl2::hint::set("SDL_IOS_ORIENTATIONS", value);
+}
+
+/// iOS-only: log the real screen/window orientation state, to diagnose why the
+/// app isn't rotating to landscape. Must be called on the main thread.
+#[cfg(target_os = "ios")]
+unsafe fn ios_dump_orientation(tag: &str) {
+    use std::ffi::{CStr, CString};
+    use std::os::raw::{c_char, c_void};
+    type Id = *mut c_void;
+    type Sel = *mut c_void;
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Sel;
+        fn objc_msgSend();
+        fn object_getClassName(obj: Id) -> *const c_char;
+    }
+    unsafe fn sel(s: &str) -> Sel {
+        sel_registerName(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn cls(s: &str) -> Id {
+        objc_getClass(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn msg0(o: Id, s: Sel) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct RectRaw {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+    }
+    unsafe fn rect(o: Id, s: Sel) -> RectRaw {
+        if o.is_null() {
+            return RectRaw {
+                x: 0.0,
+                y: 0.0,
+                w: 0.0,
+                h: 0.0,
+            };
+        }
+        let f: extern "C" fn(Id, Sel) -> RectRaw = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn ival(o: Id, s: Sel) -> i64 {
+        if o.is_null() {
+            return -999;
+        }
+        let f: extern "C" fn(Id, Sel) -> i64 = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+
+    let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+    let screen = msg0(cls("UIScreen"), sel("mainScreen"));
+    let sb = rect(screen, sel("bounds"));
+    let mut key = msg0(app, sel("keyWindow"));
+    if key.is_null() {
+        let windows = msg0(app, sel("windows"));
+        let count = ival(windows, sel("count"));
+        if count > 0 {
+            let f: extern "C" fn(Id, Sel, usize) -> Id =
+                std::mem::transmute(objc_msgSend as *const ());
+            key = f(windows, sel("objectAtIndex:"), 0);
+        }
+    }
+    let wb = rect(key, sel("bounds"));
+    let status_orient = ival(app, sel("statusBarOrientation"));
+    let root = msg0(key, sel("rootViewController"));
+    let supported = ival(root, sel("supportedInterfaceOrientations"));
+    let root_name = if root.is_null() {
+        "(nil)".to_string()
+    } else {
+        let p = object_getClassName(root);
+        if p.is_null() {
+            "(?)".to_string()
+        } else {
+            CStr::from_ptr(p).to_string_lossy().into_owned()
+        }
+    };
+    // UIInterfaceOrientation: Portrait=1 UpsideDown=2 LandscapeLeft=4 LandscapeRight=3
+    // Mask: Portrait=2 LandscapeLeft=16 LandscapeRight=8 Landscape=24 AllButUpsideDown=26
+    log!(
+        "[diag-orient] {}: screen={}x{} keyWindow={}x{} statusBarOrientation={} rootVC={} supportedOrientationsMask=0x{:x}",
+        tag, sb.w as i64, sb.h as i64, wb.w as i64, wb.h as i64, status_orient, root_name, supported
     );
 }
 
@@ -1035,6 +1229,21 @@ impl Window {
                 .unwrap();
             window
         };
+
+        #[cfg(target_os = "ios")]
+        {
+            let (ww, wh) = window.size();
+            let (dw, dh) = window.drawable_size();
+            log!(
+                "[diag-orient] window created: device_orientation={:?} rotatable_fullscreen={} requested_via=rotate_fullscreen_size window.size={}x{} drawable={}x{}",
+                device_orientation,
+                Self::rotatable_fullscreen(),
+                ww,
+                wh,
+                dw,
+                dh
+            );
+        }
 
         if env::consts::OS == "android" {
             // Sanity check
@@ -2130,6 +2339,7 @@ impl Window {
             #[cfg(target_os = "ios")]
             unsafe {
                 ios_dump_view_hierarchy("during-run-loop");
+                ios_dump_orientation("during-run-loop");
             }
         }
     }
