@@ -3,15 +3,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! `UINavigationBar`.
+//! `UINavigationBar` and its companion model classes `UINavigationItem` and
+//! `UIBarButtonItem`.
 //!
-//! Minimal stub so apps (e.g. JellyCar 3, via its ad UI) that reference
-//! `UINavigationBar` don't crash with "Class UINavigationBar is unimplemented".
-//! It inherits `UIView` (including the nib-decoding `initWithCoder:`);
-//! navigation-bar-specific setters are accepted as no-ops so creation and layout
-//! proceed. The bar renders as a plain (empty) view.
+//! Minimal stubs so apps (e.g. JellyCar 3, via its ad UI) that build a
+//! navigation bar don't crash with "Class … is unimplemented". `UINavigationBar`
+//! inherits `UIView`; the item classes inherit `NSObject`. All the
+//! navigation-specific setters/initialisers are accepted as no-ops (the inits
+//! just return the allocated object) so creation and layout proceed.
 
-use crate::objc::{id, nil, objc_classes, ClassExports};
+use crate::objc::{id, nil, objc_classes, ClassExports, SEL};
 
 pub const CLASSES: ClassExports = objc_classes! {
 
@@ -46,6 +47,48 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (id)popNavigationItemAnimated:(bool)_animated {
     nil
 }
+
+@end
+
+@implementation UINavigationItem: NSObject
+
+- (id)initWithTitle:(id)_title {
+    this
+}
+- (())setTitle:(id)_title {}
+- (())setTitleView:(id)_view {}
+- (())setPrompt:(id)_prompt {}
+- (())setHidesBackButton:(bool)_hidden {}
+- (())setHidesBackButton:(bool)_hidden animated:(bool)_animated {}
+- (())setBackBarButtonItem:(id)_item {}
+- (())setLeftBarButtonItem:(id)_item {}
+- (())setLeftBarButtonItem:(id)_item animated:(bool)_animated {}
+- (())setRightBarButtonItem:(id)_item {}
+- (())setRightBarButtonItem:(id)_item animated:(bool)_animated {}
+
+@end
+
+@implementation UIBarButtonItem: NSObject
+
+- (id)initWithTitle:(id)_title style:(i64)_style target:(id)_target action:(SEL)_action {
+    this
+}
+- (id)initWithBarButtonSystemItem:(i64)_item target:(id)_target action:(SEL)_action {
+    this
+}
+- (id)initWithImage:(id)_image style:(i64)_style target:(id)_target action:(SEL)_action {
+    this
+}
+- (id)initWithCustomView:(id)_view {
+    this
+}
+- (())setTarget:(id)_target {}
+- (())setAction:(SEL)_action {}
+- (())setStyle:(i64)_style {}
+- (())setEnabled:(bool)_enabled {}
+- (())setTitle:(id)_title {}
+- (())setWidth:(f32)_width {}
+- (())setTintColor:(id)_color {}
 
 @end
 
