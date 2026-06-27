@@ -756,6 +756,17 @@ fn glTexCoordPointer(
     stride: GLsizei,
     pointer: ConstVoidPtr,
 ) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 20 {
+            log!(
+                "[diag-ptr] glTexCoordPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
+                size, type_, stride, pointer.to_bits()
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pointer =
             translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
@@ -769,6 +780,17 @@ fn glVertexPointer(
     stride: GLsizei,
     pointer: ConstVoidPtr,
 ) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 20 {
+            log!(
+                "[diag-ptr] glVertexPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
+                size, type_, stride, pointer.to_bits()
+            );
+        }
+    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pointer =
             translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
