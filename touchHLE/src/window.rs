@@ -655,7 +655,7 @@ mod ios_ipa_picker {
         }
     }
 
-    pub fn present() {
+    extern "C" fn do_present(_ctx: *mut c_void) {
         unsafe {
             static ONCE: std::sync::Once = std::sync::Once::new();
             ONCE.call_once(|| {
@@ -740,6 +740,28 @@ mod ios_ipa_picker {
                 picker,
                 1,
                 std::ptr::null_mut(),
+            );
+        }
+    }
+
+    /// Present the Files document picker. UIKit must run on the main thread, but
+    /// touchHLE's guest/launcher code runs on a coroutine stack (not the real
+    /// main thread), so presenting directly hangs UIKit. Hop onto the main
+    /// dispatch queue first (same approach as the CoreAnimation presenter).
+    pub fn present() {
+        extern "C" {
+            static _dispatch_main_q: c_void;
+            fn dispatch_async_f(
+                queue: *const c_void,
+                context: *mut c_void,
+                work: extern "C" fn(*mut c_void),
+            );
+        }
+        unsafe {
+            dispatch_async_f(
+                &_dispatch_main_q as *const c_void,
+                std::ptr::null_mut(),
+                do_present,
             );
         }
     }
