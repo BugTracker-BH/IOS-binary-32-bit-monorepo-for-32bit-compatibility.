@@ -77,7 +77,18 @@ pub unsafe fn present_frame(
     gles.TexCoordPointer(2, gles11::FLOAT, 0, tex_coords.as_ptr() as *const GLvoid);
     let matrix = Matrix::<4>::from(&rotation_matrix);
     gles.MatrixMode(gles11::TEXTURE);
-    gles.LoadMatrixf(matrix.columns().as_ptr() as *const _);
+    // Rotate texture coordinates about their centre (0.5, 0.5), not the origin.
+    // A 90° rotation about the origin pushes the [0,1] quad texcoords negative,
+    // which only samples correctly when the texture wraps GL_REPEAT. On iOS the
+    // offscreen/screen texture is non-power-of-two and is forced to
+    // CLAMP_TO_EDGE (Apple's NPOT requirement), so origin-rotation clamped the
+    // out-of-range texcoords to the edge and smeared the image into bands.
+    // Centring keeps all texcoords within [0,1] so it is correct regardless of
+    // wrap mode (and is a no-op for the identity / portrait case).
+    gles.LoadIdentity();
+    gles.Translatef(0.5, 0.5, 0.0);
+    gles.MultMatrixf(matrix.columns().as_ptr() as *const _);
+    gles.Translatef(-0.5, -0.5, 0.0);
     gles.Enable(gles11::TEXTURE_2D);
     gles.DrawArrays(gles11::TRIANGLES, 0, 6);
     // clean this up so we don't need to worry about it in e.g. Core Animation
