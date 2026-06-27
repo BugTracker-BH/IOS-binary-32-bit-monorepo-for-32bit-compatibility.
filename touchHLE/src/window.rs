@@ -489,6 +489,275 @@ extern "C" fn present_on_main(ctx: *mut std::os::raw::c_void) {
     drop(payload);
 }
 
+// ============================================================================
+// iOS: import a 32-bit app from an .ipa via the Files document picker.
+//
+// The launcher's "Load .ipa" button calls ios_present_ipa_picker(), which puts a
+// real UIDocumentPickerViewController on screen. When the user picks an .ipa we
+// extract its Payload/*.app into the writable touchHLE_apps dir and record the
+// path; the app-picker run loop polls ios_take_imported_app() and launches it.
+// All Obj-C here is the *host* runtime (real iOS UIKit, not touchHLE's emulated
+// UIKit). Everything fails gracefully (no panics) so a problem just means
+// "nothing was imported".
+// ============================================================================
+#[cfg(target_os = "ios")]
+mod ios_ipa_picker {
+    use std::ffi::{CStr, CString};
+    use std::os::raw::{c_char, c_void};
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicPtr, Ordering};
+
+    type Id = *mut c_void;
+    type Sel = *mut c_void;
+
+    static IMPORTED_APP_PATH: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+    static DELEGATE_INSTANCE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Sel;
+        fn objc_msgSend();
+        fn objc_allocateClassPair(superclass: Id, name: *const c_char, extra: usize) -> Id;
+        fn objc_registerClassPair(cls: Id);
+        fn class_addMethod(cls: Id, name: Sel, imp: *const c_void, types: *const c_char) -> bool;
+    }
+
+    unsafe fn sel(s: &str) -> Sel {
+        sel_registerName(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn cls(s: &str) -> Id {
+        objc_getClass(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn msg0(o: Id, s: Sel) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn msg1(o: Id, s: Sel, a: Id) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel, Id) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s, a)
+    }
+    unsafe fn ns_str(s: &str) -> Id {
+        let c = CString::new(s).unwrap();
+        let f: extern "C" fn(Id, Sel, *const c_char) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(cls("NSString"), sel("stringWithUTF8String:"), c.as_ptr())
+    }
+    unsafe fn ns_to_string(s: Id) -> Option<String> {
+        if s.is_null() {
+            return None;
+        }
+        let f: extern "C" fn(Id, Sel) -> *const c_char =
+            std::mem::transmute(objc_msgSend as *const ());
+        let p = f(s, sel("UTF8String"));
+        if p.is_null() {
+            return None;
+        }
+        Some(CStr::from_ptr(p).to_string_lossy().into_owned())
+    }
+
+    pub fn take_imported_app() -> Option<PathBuf> {
+        IMPORTED_APP_PATH.lock().unwrap().take()
+    }
+
+    /// Extract Payload/*.app from an .ipa into the touchHLE_apps dir. Returns the
+    /// path of the extracted .app on success.
+    fn import_ipa(ipa_path: &Path) -> Option<PathBuf> {
+        let apps_dir = crate::paths::user_data_base_path().join(crate::paths::APPS_DIR);
+        std::fs::create_dir_all(&apps_dir).ok()?;
+        let file = std::fs::File::open(ipa_path).ok()?;
+        let mut zip = zip::ZipArchive::new(file).ok()?;
+        let mut app_dir_name: Option<String> = None;
+        for i in 0..zip.len() {
+            let mut entry = match zip.by_index(i) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            let name = entry.name().replace('\\', "/");
+            let rest = match name.strip_prefix("Payload/") {
+                Some(r) if !r.is_empty() => r.to_string(),
+                _ => continue,
+            };
+            if app_dir_name.is_none() {
+                if let Some(first) = rest.split('/').next() {
+                    if first.to_ascii_lowercase().ends_with(".app") {
+                        app_dir_name = Some(first.to_string());
+                    }
+                }
+            }
+            let dest = apps_dir.join(&rest);
+            if name.ends_with('/') {
+                let _ = std::fs::create_dir_all(&dest);
+            } else {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if let Ok(mut out) = std::fs::File::create(&dest) {
+                    let _ = std::io::copy(&mut entry, &mut out);
+                }
+            }
+        }
+        app_dir_name.map(|n| apps_dir.join(n))
+    }
+
+    unsafe fn handle_url(url: Id) {
+        if url.is_null() {
+            return;
+        }
+        if let Some(path) = ns_to_string(msg0(url, sel("path"))) {
+            crate::log!("[ios] Files picker selected: {}", path);
+            match import_ipa(Path::new(&path)) {
+                Some(app_path) => {
+                    crate::log!("[ios] Imported app: {}", app_path.display());
+                    *IMPORTED_APP_PATH.lock().unwrap() = Some(app_path);
+                }
+                None => crate::log!("[ios] Import failed (no Payload/*.app in the chosen file?)"),
+            }
+        }
+    }
+
+    unsafe fn dismiss(picker: Id) {
+        let f: extern "C" fn(Id, Sel, i8, Id) = std::mem::transmute(objc_msgSend as *const ());
+        f(
+            picker,
+            sel("dismissViewControllerAnimated:completion:"),
+            1,
+            std::ptr::null_mut(),
+        );
+        let d = DELEGATE_INSTANCE.swap(std::ptr::null_mut(), Ordering::Relaxed);
+        if !d.is_null() {
+            msg0(d, sel("release"));
+        }
+    }
+
+    // iOS 14+ plural callback.
+    extern "C" fn did_pick_multi(_self: Id, _cmd: Sel, picker: Id, urls: Id) {
+        unsafe {
+            handle_url(msg0(urls, sel("firstObject")));
+            dismiss(picker);
+        }
+    }
+    // Older singular callback.
+    extern "C" fn did_pick_single(_self: Id, _cmd: Sel, picker: Id, url: Id) {
+        unsafe {
+            handle_url(url);
+            dismiss(picker);
+        }
+    }
+    extern "C" fn did_cancel(_self: Id, _cmd: Sel, picker: Id) {
+        unsafe {
+            dismiss(picker);
+        }
+    }
+
+    pub fn present() {
+        unsafe {
+            static ONCE: std::sync::Once = std::sync::Once::new();
+            ONCE.call_once(|| {
+                let sc = cls("NSObject");
+                let name = CString::new("touchHLEIpaPickerDelegate").unwrap();
+                let nc = objc_allocateClassPair(sc, name.as_ptr(), 0);
+                if !nc.is_null() {
+                    let t2 = CString::new("v@:@@").unwrap();
+                    class_addMethod(
+                        nc,
+                        sel("documentPicker:didPickDocumentsAtURLs:"),
+                        did_pick_multi as *const c_void,
+                        t2.as_ptr(),
+                    );
+                    class_addMethod(
+                        nc,
+                        sel("documentPicker:didPickDocumentAtURL:"),
+                        did_pick_single as *const c_void,
+                        t2.as_ptr(),
+                    );
+                    let t1 = CString::new("v@:@").unwrap();
+                    class_addMethod(
+                        nc,
+                        sel("documentPickerWasCancelled:"),
+                        did_cancel as *const c_void,
+                        t1.as_ptr(),
+                    );
+                    objc_registerClassPair(nc);
+                }
+            });
+
+            let dcls = cls("touchHLEIpaPickerDelegate");
+            if dcls.is_null() {
+                return;
+            }
+            let delegate = msg0(msg0(dcls, sel("alloc")), sel("init"));
+            if delegate.is_null() {
+                return;
+            }
+            msg0(delegate, sel("retain"));
+            DELEGATE_INSTANCE.store(delegate, Ordering::Relaxed);
+
+            // .ipa has no standard UTI, so accept generic data files.
+            let types = msg1(cls("NSArray"), sel("arrayWithObject:"), ns_str("public.data"));
+
+            let picker = msg0(cls("UIDocumentPickerViewController"), sel("alloc"));
+            // initWithDocumentTypes:inMode:  (UIDocumentPickerModeImport == 0)
+            let picker = {
+                let f: extern "C" fn(Id, Sel, Id, u64) -> Id =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(picker, sel("initWithDocumentTypes:inMode:"), types, 0)
+            };
+            if picker.is_null() {
+                return;
+            }
+            msg1(picker, sel("setDelegate:"), delegate);
+
+            let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+            let mut win = msg0(app, sel("keyWindow"));
+            if win.is_null() {
+                let windows = msg0(app, sel("windows"));
+                let count: usize = {
+                    let f: extern "C" fn(Id, Sel) -> usize =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f(windows, sel("count"))
+                };
+                if count > 0 {
+                    let f: extern "C" fn(Id, Sel, usize) -> Id =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    win = f(windows, sel("objectAtIndex:"), 0);
+                }
+            }
+            let root = msg0(win, sel("rootViewController"));
+            if root.is_null() {
+                return;
+            }
+            let f: extern "C" fn(Id, Sel, Id, i8, Id) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(
+                root,
+                sel("presentViewController:animated:completion:"),
+                picker,
+                1,
+                std::ptr::null_mut(),
+            );
+        }
+    }
+}
+
+/// iOS: present the Files document picker so the user can choose an `.ipa` to
+/// import and launch. See [ios_ipa_picker].
+#[cfg(target_os = "ios")]
+pub fn ios_present_ipa_picker() {
+    ios_ipa_picker::present();
+}
+
+/// iOS: take the path of an app just imported via the Files picker, if any.
+#[cfg(target_os = "ios")]
+pub fn ios_take_imported_app() -> Option<std::path::PathBuf> {
+    ios_ipa_picker::take_imported_app()
+}
+
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.

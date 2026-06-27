@@ -242,6 +242,14 @@ const CLASSES: ClassExports = objc_classes! {
     // Assert (see above).
     let _ = env.objc.borrow_mut::<AppPickerDelegateHostObject>(this);
 
+    // On iOS there is no desktop file browser to open. Instead present the Files
+    // document picker so the user can choose a 32-bit .ipa to import and run; the
+    // run loop below polls window::ios_take_imported_app() and launches it.
+    #[cfg(target_os = "ios")]
+    {
+        crate::window::ios_present_ipa_picker();
+    }
+    #[cfg(not(target_os = "ios"))]
     match paths::url_for_opening_user_data_dir() {
         Ok(url) => {
             // Our `openURL:` implementation is bypassed because it doesn't
@@ -426,36 +434,9 @@ fn app_picker_inner(
         () = msg![env; main_view addSubview:label];
     }
 
-    let brand_color: id = if crate::branding() == "UNOFFICIAL" {
-        msg_class![env; UIColor redColor]
-    } else {
-        msg_class![env; UIColor grayColor]
-    };
-
-    for i in 1..=7 {
-        let label_frame = CGRect {
-            origin: CGPoint {
-                x: 0.0,
-                y: (app_frame.size.height / 8.0) * (i as f32) - 25.0,
-            },
-            size: CGSize {
-                width: app_frame.size.width,
-                height: 50.0,
-            },
-        };
-        let label: id = msg_class![env; UILabel alloc];
-        let label: id = msg![env; label initWithFrame:label_frame];
-        let text = ns_string::from_rust_string(env, crate::branding().to_owned());
-        () = msg![env; label setText:text];
-        () = msg![env; label setTextAlignment:(if i % 2 == 0 { UITextAlignmentLeft } else { UITextAlignmentRight })];
-        let font_size: CGFloat = 48.0;
-        let font: id = msg_class![env; UIFont systemFontOfSize:font_size];
-        () = msg![env; label setFont:font];
-        () = msg![env; label setTextColor:brand_color];
-        let bg_color: id = msg_class![env; UIColor clearColor];
-        () = msg![env; label setBackgroundColor:bg_color];
-        () = msg![env; main_view addSubview:label];
-    }
+    // (The large diagonal "UNOFFICIAL" / "PREVIEW" branding watermark that used
+    // to be drawn across the launcher background has been removed for a cleaner
+    // look.)
 
     let divider = app_frame.size.height - 100.0;
 
@@ -504,7 +485,14 @@ fn app_picker_inner(
         app_frame.size,
         buttons_row_center,
         &[
-            ("File manager", "openFileManager"),
+            (
+                if cfg!(target_os = "ios") {
+                    "Load .ipa"
+                } else {
+                    "File manager"
+                },
+                "openFileManager",
+            ),
             ("Quick options", "quickOptionsShow"),
         ],
         None,
@@ -580,6 +568,12 @@ fn app_picker_inner(
     // process exits.
     let app_path = loop {
         run_run_loop_single_iteration(env, main_run_loop);
+        // iOS: if the user imported an .ipa via the Files picker, launch it.
+        #[cfg(target_os = "ios")]
+        if let Some(imported) = crate::window::ios_take_imported_app() {
+            echo!("Launching imported app: {}", imported.display());
+            break imported;
+        }
         let host_obj = env.objc.borrow_mut::<AppPickerDelegateHostObject>(delegate);
         let icon_tapped = std::mem::take(&mut host_obj.icon_tapped);
         if icon_tapped != nil {
