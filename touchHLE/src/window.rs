@@ -2350,28 +2350,55 @@ impl Window {
                 work: extern "C" fn(*mut c_void),
             );
         }
+        // The pixels are the guest's portrait (w x h, typically 320x480) offscreen
+        // framebuffer, bottom-up (glReadPixels). CGImage wants top-to-bottom, so we
+        // always flip vertically. When the emulated device is landscape we ALSO
+        // rotate 90°, so the content displays upright and fills the rotated window.
+        // We do this on the CPU (instead of via the SDL screen framebuffer) because
+        // after an iOS-forced rotation SDL's renderbuffer stays portrait-sized while
+        // the window is landscape — reading the offscreen + rotating here sidesteps
+        // that desync entirely.
+        let landscape = matches!(
+            self.device_orientation,
+            DeviceOrientation::LandscapeLeft | DeviceOrientation::LandscapeRight
+        );
         unsafe {
             let buf = libc::malloc(n) as *mut u8;
             if buf.is_null() {
                 return;
             }
-            // glReadPixels rows are bottom-to-top; CGImage expects top-to-bottom.
-            let row = w * 4;
-            for y in 0..h {
-                let src_off = (h - 1 - y) * row;
-                std::ptr::copy_nonoverlapping(pixels.as_ptr().add(src_off), buf.add(y * row), row);
-            }
+            let (out_w, out_h) = if landscape {
+                // Combined vertical-flip + 90° rotation. Output is (h wide x w tall).
+                // Derivation: flip makes flipped[fy][fx]=pixels[h-1-fy][fx]; a 90°
+                // rotation of that gives out[oy][ox]=pixels[ox][oy] (bottom-up src).
+                let (ow, oh) = (h, w);
+                for oy in 0..oh {
+                    for ox in 0..ow {
+                        let src = (ox * w + oy) * 4;
+                        let dst = (oy * ow + ox) * 4;
+                        std::ptr::copy_nonoverlapping(pixels.as_ptr().add(src), buf.add(dst), 4);
+                    }
+                }
+                (ow, oh)
+            } else {
+                let row = w * 4;
+                for y in 0..h {
+                    let src_off = (h - 1 - y) * row;
+                    std::ptr::copy_nonoverlapping(
+                        pixels.as_ptr().add(src_off),
+                        buf.add(y * row),
+                        row,
+                    );
+                }
+                (w, h)
+            };
             let payload = Box::new(PresentPayload {
                 buf: buf as *mut c_void,
-                w,
-                h,
+                w: out_w,
+                h: out_h,
             });
             let ctx = Box::into_raw(payload) as *mut c_void;
-            dispatch_async_f(
-                &_dispatch_main_q as *const c_void,
-                ctx,
-                present_on_main,
-            );
+            dispatch_async_f(&_dispatch_main_q as *const c_void, ctx, present_on_main);
         }
     }
 

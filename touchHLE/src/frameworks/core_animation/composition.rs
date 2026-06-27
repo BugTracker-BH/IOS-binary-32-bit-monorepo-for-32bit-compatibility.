@@ -495,38 +495,30 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
     // read the rendered frame back and present it through CoreAnimation, which
     // is guaranteed to composite.
     //
-    // Crucially we read back the SCREEN framebuffer (which the present_frame()
-    // call above has just filled) rather than the raw offscreen. present_frame()
-    // clears the whole screen FBO to black and draws the frame into the viewport
-    // with the device rotation_matrix applied, so the screen FBO already holds
-    // the correctly oriented, viewport-placed, black-letterboxed image. Reading
-    // the raw offscreen instead would drop rotation + viewport, so a landscape
-    // game would appear sideways/mis-placed and — because the input transform
-    // (transform_input_coords) maps touches using exactly this viewport +
-    // rotation — every touch would land in the wrong place or be discarded.
-    // Reusing present_frame()'s output keeps display and input in the same frame
-    // with no rotation math here.
+    // iOS: read back the OFFSCREEN (the guest's composited 320x480 framebuffer,
+    // which always has the correct content) and present it through CoreAnimation.
+    // We deliberately do NOT use the SDL screen framebuffer here: after an
+    // iOS-forced rotation to landscape, SDL reports a landscape drawable size but
+    // its underlying EAGL renderbuffer stays portrait-sized, so present_frame()
+    // draws a clipped/garbage frame into it. present_frame_to_calayer() rotates
+    // this offscreen to the device orientation on the CPU, so it fills the window
+    // correctly in both portrait and landscape regardless of SDL's renderbuffer.
     #[cfg(target_os = "ios")]
     let ios_frame: Option<(Vec<u8>, u32, u32)> = unsafe {
-        // Derive the full screen size from the viewport present_frame() used:
-        // x = (screen_w - scaled_w)/2, so screen_w = scaled_w + 2*x (likewise y).
-        let (vx, vy, vw, vh) = present_frame_args.0;
-        let screen_w = vw + 2 * vx;
-        let screen_h = vh + 2 * vy;
-        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, screen_framebuffer);
+        gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, offscreen_fb);
         gles.Finish();
-        let n = (screen_w as usize) * (screen_h as usize) * 4;
+        let n = (fb_width as usize) * (fb_height as usize) * 4;
         let mut v = vec![0u8; n];
         gles.ReadPixels(
             0,
             0,
-            screen_w as _,
-            screen_h as _,
+            fb_width as _,
+            fb_height as _,
             gles11::RGBA,
             gles11::UNSIGNED_BYTE,
             v.as_mut_ptr() as *mut _,
         );
-        Some((v, screen_w, screen_h))
+        Some((v, fb_width, fb_height))
     };
 
     std::mem::drop(gles);
