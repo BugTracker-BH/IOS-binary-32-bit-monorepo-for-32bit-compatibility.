@@ -252,6 +252,22 @@ forUndefinedKey:(id)key { // NSString*
     env.objc.object_has_method(&env.mem, this, selector)
 }
 
+- (MutVoidPtr)methodForSelector:(SEL)selector {
+    // Return the guest IMP (code address) for the selector, walking the class
+    // chain of the receiver's isa (for a class object that's the metaclass, i.e.
+    // class methods). Host-implemented or missing methods yield null. Some ad
+    // SDKs (e.g. AdWhirl / its ZestADZ adapter in JellyCar 3) call this for
+    // reflection; without it touchHLE panics with "does not respond to selector".
+    if selector.is_null() {
+        return MutVoidPtr::null();
+    }
+    let class = ObjC::read_isa(this, &env.mem);
+    match env.objc.class_get_guest_method_imp(class, selector) {
+        Some(imp) => MutVoidPtr::from_bits(imp.addr_with_thumb_bit()),
+        None => MutVoidPtr::null(),
+    }
+}
+
 - (id)performSelector:(SEL)sel {
     assert!(!sel.is_null());
     msg_send_no_type_checking(env, (this, sel))

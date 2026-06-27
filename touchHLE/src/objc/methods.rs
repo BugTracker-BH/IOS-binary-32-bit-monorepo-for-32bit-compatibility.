@@ -165,6 +165,32 @@ impl ObjC {
         methods.contains_key(&sel)
     }
 
+    /// Look up the guest IMP (function address) for a selector along a class
+    /// chain. Returns `None` if the method is missing or is host-implemented
+    /// (host IMPs are Rust functions, not callable guest addresses). Used by
+    /// `-[NSObject methodForSelector:]`, which some SDKs (e.g. AdWhirl) call for
+    /// reflection.
+    pub fn class_get_guest_method_imp(&self, class: Class, sel: SEL) -> Option<GuestFunction> {
+        let mut class = class;
+        loop {
+            let &ClassHostObject {
+                superclass,
+                ref methods,
+                ..
+            } = self.borrow(class);
+            if let Some(imp) = methods.get(&sel) {
+                return match imp {
+                    IMP::Guest(g) => Some(*g),
+                    IMP::Host(_) => None,
+                };
+            } else if superclass == nil {
+                return None;
+            } else {
+                class = superclass;
+            }
+        }
+    }
+
     pub fn class_get_method_signature(&self, class: Class, sel: SEL) -> Option<&ConstPtr<u8>> {
         // TODO: support `host` method signatures
         let mut class = class;
