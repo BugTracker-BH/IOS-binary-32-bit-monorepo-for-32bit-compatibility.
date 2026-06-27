@@ -228,8 +228,9 @@ fn objc_msgSend_inner(
         let sel_name = selector.as_str(&env.mem).to_string();
         MSG_RING.with(|ring| {
             let mut r = ring.borrow_mut();
-            r.buf[r.pos] = Some((class_name, sel_name));
-            r.pos = (r.pos + 1) % r.buf.len();
+            let pos = r.pos;
+            r.buf[pos] = Some((class_name, sel_name));
+            r.pos = (pos + 1) % r.buf.len();
         });
     }
 
