@@ -472,9 +472,16 @@ impl GLES for GLES1Native<'_> {
                             *v = *f.add(i);
                         }
                     }
+                    // Live vertex-array state native GL will use for this draw.
+                    let mut vsz: GLint = 0;
+                    gles11::GetIntegerv(0x807A, &mut vsz); // GL_VERTEX_ARRAY_SIZE
+                    let mut vty: GLint = 0;
+                    gles11::GetIntegerv(0x807B, &mut vty); // GL_VERTEX_ARRAY_TYPE
+                    let mut vst: GLint = 0;
+                    gles11::GetIntegerv(0x807C, &mut vst); // GL_VERTEX_ARRAY_STRIDE
                     log!(
-                        "[diag-tc] #{} count={} tcSize={} tcType=0x{:x} tcStride={} tcPtrNull={} tc8={:?}",
-                        n, count, sz, ty, st, tcp.is_null(), tc
+                        "[diag-tc] #{} count={} vSize={} vType=0x{:x} vStride={} | tcSize={} tcType=0x{:x} tcStride={} tcPtrNull={} tc8={:?}",
+                        n, count, vsz, vty, vst, sz, ty, st, tcp.is_null(), tc
                     );
                 }
             }
