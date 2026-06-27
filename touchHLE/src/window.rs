@@ -2368,13 +2368,14 @@ impl Window {
                 return;
             }
             let (out_w, out_h) = if landscape {
-                // Combined vertical-flip + 90° rotation. Output is (h wide x w tall).
-                // Derivation: flip makes flipped[fy][fx]=pixels[h-1-fy][fx]; a 90°
-                // rotation of that gives out[oy][ox]=pixels[ox][oy] (bottom-up src).
+                // Combined vertical-flip + 90° COUNTER-clockwise rotation. Output
+                // is (h wide x w tall). CCW (not CW) so landscape content lands
+                // right-side up — CW came out 180° upside-down.
+                // out[oy][ox] = flipped[ox][w-1-oy] = pixels[h-1-ox][w-1-oy].
                 let (ow, oh) = (h, w);
                 for oy in 0..oh {
                     for ox in 0..ow {
-                        let src = (ox * w + oy) * 4;
+                        let src = ((h - 1 - ox) * w + (w - 1 - oy)) * 4;
                         let dst = (oy * ow + ox) * 4;
                         std::ptr::copy_nonoverlapping(pixels.as_ptr().add(src), buf.add(dst), 4);
                     }
