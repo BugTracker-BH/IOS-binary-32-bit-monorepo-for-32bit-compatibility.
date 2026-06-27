@@ -657,6 +657,7 @@ mod ios_ipa_picker {
 
     extern "C" fn do_present(_ctx: *mut c_void) {
         unsafe {
+            eprintln!("[ios] doc-picker: do_present running on main thread");
             static ONCE: std::sync::Once = std::sync::Once::new();
             ONCE.call_once(|| {
                 let sc = cls("NSObject");
@@ -730,8 +731,10 @@ mod ios_ipa_picker {
             }
             let root = msg0(win, sel("rootViewController"));
             if root.is_null() {
+                eprintln!("[ios] doc-picker: no rootViewController; cannot present");
                 return;
             }
+            eprintln!("[ios] doc-picker: presenting Files picker over root VC");
             let f: extern "C" fn(Id, Sel, Id, i8, Id) =
                 std::mem::transmute(objc_msgSend as *const ());
             f(
@@ -741,6 +744,7 @@ mod ios_ipa_picker {
                 1,
                 std::ptr::null_mut(),
             );
+            eprintln!("[ios] doc-picker: presentViewController call returned");
         }
     }
 
