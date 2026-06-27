@@ -12,6 +12,8 @@ env:
 jobs:
   ios-app:
     runs-on: macos-15
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: touchHLE
@@ -146,3 +148,17 @@ jobs:
             touchHLE/touchHLE_rootless.deb
             touchHLE/build-ios.log
           if-no-files-found: warn
+      - name: Publish IPA to the "v1000" release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1000
+          name: v1000
+          # First run creates the v1000 tag + release; later runs update the
+          # release and replace the .ipa/.deb assets with the freshly built ones.
+          make_latest: true
+          files: |
+            touchHLE/touchHLE.ipa
+            touchHLE/touchHLE_rootless.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
