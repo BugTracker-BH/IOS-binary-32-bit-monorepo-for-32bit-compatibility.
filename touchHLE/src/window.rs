@@ -207,6 +207,141 @@ unsafe fn ios_dump_orientation(tag: &str) {
     );
 }
 
+/// iOS-only: ask iOS to re-evaluate the app's interface orientation. Changing
+/// SDL's view-controller's `supportedInterfaceOrientations` at runtime does NOT
+/// auto-rotate the app — iOS only re-queries when explicitly told. Without this,
+/// a landscape game's window stays portrait (letterboxed strip). Dispatched to
+/// the main thread because all of this is UIKit.
+#[cfg(target_os = "ios")]
+fn ios_request_orientation_update() {
+    use std::os::raw::c_void;
+    extern "C" {
+        static _dispatch_main_q: c_void;
+        fn dispatch_async_f(
+            queue: *const c_void,
+            context: *mut c_void,
+            work: extern "C" fn(*mut c_void),
+        );
+    }
+    unsafe {
+        dispatch_async_f(
+            &_dispatch_main_q as *const c_void,
+            std::ptr::null_mut(),
+            ios_orientation_update_work,
+        );
+    }
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn ios_orientation_update_work(_ctx: *mut std::os::raw::c_void) {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_void};
+    type Id = *mut c_void;
+    type Sel = *mut c_void;
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Sel;
+        fn objc_msgSend();
+    }
+    unsafe fn sel(s: &str) -> Sel {
+        sel_registerName(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn cls(s: &str) -> Id {
+        objc_getClass(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn msg0(o: Id, s: Sel) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn ival(o: Id, s: Sel) -> i64 {
+        if o.is_null() {
+            return 0;
+        }
+        let f: extern "C" fn(Id, Sel) -> i64 = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn responds(o: Id, name: &str) -> bool {
+        if o.is_null() {
+            return false;
+        }
+        let f: extern "C" fn(Id, Sel, Sel) -> bool = std::mem::transmute(objc_msgSend as *const ());
+        f(o, sel("respondsToSelector:"), sel(name))
+    }
+
+    unsafe {
+        let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+        let mut key = msg0(app, sel("keyWindow"));
+        if key.is_null() {
+            let windows = msg0(app, sel("windows"));
+            let count = ival(windows, sel("count"));
+            if count > 0 {
+                let f: extern "C" fn(Id, Sel, i64) -> Id =
+                    std::mem::transmute(objc_msgSend as *const ());
+                key = f(windows, sel("objectAtIndex:"), 0);
+            }
+        }
+        let root = msg0(key, sel("rootViewController"));
+
+        // iOS 16+: tell the VC its supported orientations changed (modern
+        // replacement for attemptRotationToDeviceOrientation).
+        if responds(root, "setNeedsUpdateOfSupportedInterfaceOrientations") {
+            msg0(root, sel("setNeedsUpdateOfSupportedInterfaceOrientations"));
+        }
+
+        // iOS 16+: explicitly request the window scene rotate to the VC's
+        // currently-supported orientation(s).
+        let scene = msg0(key, sel("windowScene"));
+        let mask = ival(root, sel("supportedInterfaceOrientations")) as u64;
+        let scene_responds =
+            !scene.is_null() && responds(scene, "requestGeometryUpdateWithPreferences:errorHandler:");
+        eprintln!(
+            "[ios] orient-update: root_nil={} scene_nil={} mask={} scene_responds_geom={} setNeedsUpdate_responds={} attemptRotation_responds={}",
+            root.is_null(),
+            scene.is_null(),
+            mask,
+            scene_responds,
+            responds(root, "setNeedsUpdateOfSupportedInterfaceOrientations"),
+            responds(cls("UIViewController"), "attemptRotationToDeviceOrientation"),
+        );
+        if scene_responds {
+            let prefs_cls = cls("UIWindowSceneGeometryPreferencesIOS");
+            if !prefs_cls.is_null() {
+                let prefs = msg0(prefs_cls, sel("alloc"));
+                let prefs = {
+                    let f: extern "C" fn(Id, Sel, u64) -> Id =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f(prefs, sel("initWithInterfaceOrientations:"), mask)
+                };
+                if !prefs.is_null() {
+                    let f: extern "C" fn(Id, Sel, Id, Id) =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f(
+                        scene,
+                        sel("requestGeometryUpdateWithPreferences:errorHandler:"),
+                        prefs,
+                        std::ptr::null_mut(),
+                    );
+                    eprintln!("[ios] orient-update: requestGeometryUpdate CALLED mask={}", mask);
+                } else {
+                    eprintln!("[ios] orient-update: prefs alloc/init FAILED");
+                }
+            } else {
+                eprintln!("[ios] orient-update: UIWindowSceneGeometryPreferencesIOS class MISSING");
+            }
+        }
+
+        // Legacy fallback (iOS < 16): force a rotation re-evaluation.
+        let vc_cls = cls("UIViewController");
+        if responds(vc_cls, "attemptRotationToDeviceOrientation") {
+            msg0(vc_cls, sel("attemptRotationToDeviceOrientation"));
+        }
+        eprintln!("[ios] requested orientation update");
+    }
+}
+
 /// iOS-only: introspect the live UIKit view hierarchy via the Objective-C
 /// runtime and log it, to diagnose why SDL's GL view (a CAEAGLLayer) is not
 /// being composited to the screen. Must be called on the main thread.
@@ -578,6 +713,19 @@ extern "C" fn present_on_main(ctx: *mut std::os::raw::c_void) {
                 let f: extern "C" fn(Id, *mut c_void, i8) =
                     std::mem::transmute(objc_msgSend as *const ());
                 f(ct, sel("setDisableActions:"), 1);
+            }
+            // Keep the overlay matching the (possibly rotated) window bounds, so
+            // the presented frame fills the screen after an orientation change
+            // instead of staying at the original (portrait) size.
+            if !window_layer.is_null() {
+                let bounds: RectRaw = {
+                    let f: extern "C" fn(Id, *mut c_void) -> RectRaw =
+                        std::mem::transmute(objc_msgSend as *const ());
+                    f(window_layer, sel("bounds"))
+                };
+                let f: extern "C" fn(Id, *mut c_void, RectRaw) =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(overlay, sel("setFrame:"), bounds);
             }
             msg1(overlay, sel("setContents:"), img);
             msg0(ct, sel("commit"));
@@ -2319,6 +2467,13 @@ impl Window {
             self.window
                 .set_fullscreen(sdl2::video::FullscreenType::True)
                 .unwrap();
+
+            // SDL updated the view controller's supportedInterfaceOrientations,
+            // but iOS won't re-rotate the app until explicitly asked to. Without
+            // this the app stays portrait (the game shows as a letterboxed
+            // strip); with it the app rotates to match (fullscreen landscape).
+            #[cfg(target_os = "ios")]
+            ios_request_orientation_update();
         }
 
         self.device_orientation = new_orientation;
