@@ -268,6 +268,18 @@ forUndefinedKey:(id)key { // NSString*
     }
 }
 
+- (id)initWithCoder:(id)_coder {
+    // Fallback NSCoding decoder. Classes that actually conform to NSCoding (e.g.
+    // UIView and its subclasses) override this with real decoding; this only
+    // applies to classes that don't, where the nib unarchiver would otherwise
+    // panic with "does not respond to initWithCoder:". We return the object
+    // un-decoded (encoded properties ignored) so nib loading proceeds — this is
+    // what lets stub model classes (UINavigationItem, UIBarButtonItem, …) load
+    // from a nib without crashing.
+    log_once!("TODO: NSObject initWithCoder: fallback (decoding ignored for this class)");
+    this
+}
+
 - (id)performSelector:(SEL)sel {
     assert!(!sel.is_null());
     msg_send_no_type_checking(env, (this, sel))
