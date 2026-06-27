@@ -565,6 +565,17 @@ mod ios_ipa_picker {
         IMPORTED_APP_PATH.lock().unwrap().take()
     }
 
+    /// Show/hide the CoreAnimation overlay used to present touchHLE's own frames.
+    /// It has a very high zPosition, so while a native modal (the Files picker) is
+    /// up we must hide it or it covers the modal.
+    unsafe fn set_overlay_hidden(hidden: bool) {
+        let overlay = super::OVERLAY_LAYER.load(Ordering::Relaxed);
+        if !overlay.is_null() {
+            let f: extern "C" fn(Id, Sel, i8) = std::mem::transmute(objc_msgSend as *const ());
+            f(overlay, sel("setHidden:"), if hidden { 1 } else { 0 });
+        }
+    }
+
     /// Extract Payload/*.app from an .ipa into the touchHLE_apps dir. Returns the
     /// path of the extracted .app on success.
     fn import_ipa(ipa_path: &Path) -> Option<PathBuf> {
@@ -622,6 +633,8 @@ mod ios_ipa_picker {
     }
 
     unsafe fn dismiss(picker: Id) {
+        // Restore the overlay we hid while the sheet was up.
+        set_overlay_hidden(false);
         let f: extern "C" fn(Id, Sel, i8, Id) = std::mem::transmute(objc_msgSend as *const ());
         f(
             picker,
@@ -745,6 +758,10 @@ mod ios_ipa_picker {
                 std::ptr::null_mut(),
             );
             eprintln!("[ios] doc-picker: presentViewController call returned");
+            // Hide our high-zPosition CoreAnimation overlay so it doesn't cover
+            // the Files sheet. Restored in dismiss().
+            set_overlay_hidden(true);
+            eprintln!("[ios] doc-picker: overlay hidden so the sheet is visible");
         }
     }
 
