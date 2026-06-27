@@ -80,7 +80,13 @@ fn NSSearchPathForDirectoriesInDomains(
             .home_directory()
             .join("Library")
             .join("Application Support"),
-        _ => todo!("NSSearchPathDirectory {}", directory),
+        _ => {
+            log!(
+                "Warning: unimplemented NSSearchPathDirectory {}; falling back to Caches dir.",
+                directory
+            );
+            env.fs.home_directory().join("Library").join("Caches")
+        }
     };
     let dir = ns_string::from_rust_string(env, String::from(dir));
     let dir_list = ns_array::from_vec(env, vec![dir]);

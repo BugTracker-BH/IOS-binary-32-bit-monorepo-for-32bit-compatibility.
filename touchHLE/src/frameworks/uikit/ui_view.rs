@@ -10,6 +10,7 @@
 
 pub mod ui_alert_view;
 pub mod ui_control;
+pub mod extra_stubs;
 pub mod ui_image_view;
 pub mod ui_label;
 pub mod ui_navigation_bar;
