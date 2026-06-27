@@ -502,6 +502,7 @@ fn class_name_should_be_faked(name: &str) -> bool {
         || name.starts_with("Tapjoy")
         || name.starts_with("AdWhirl")
         || name.starts_with("iSimulate")
+        || name.starts_with("DMO") // Disney Mobile Online backend
 }
 
 impl ObjC {
