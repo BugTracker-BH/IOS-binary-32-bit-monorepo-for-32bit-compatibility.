@@ -274,6 +274,13 @@ unsafe fn ios_dump_view_hierarchy(tag: &str) {
 #[cfg(target_os = "ios")]
 static OVERLAY_LAYER: std::sync::atomic::AtomicPtr<std::os::raw::c_void> =
     std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+/// The window layer the overlay is currently attached to. If the key window
+/// changes (e.g. the app-picker window is torn down and the game's window is
+/// created), the overlay must be moved to the new window or the new window
+/// renders black (the classic "second window" bug).
+#[cfg(target_os = "ios")]
+static OVERLAY_WINDOW_LAYER: std::sync::atomic::AtomicPtr<std::os::raw::c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
 
 #[cfg(target_os = "ios")]
 #[repr(C)]
@@ -420,8 +427,23 @@ extern "C" fn present_on_main(ctx: *mut std::os::raw::c_void) {
         }
         let window_layer = msg0(key_window, sel("layer"));
 
-        // Create the overlay layer on first use.
+        // If the key window changed since we created the overlay (e.g. the app
+        // picker's window was replaced by the launched game's window), detach and
+        // drop the stale overlay so it is recreated on the *current* window.
+        // Without this the overlay stays on the dead window and the new window
+        // renders black.
         let mut overlay = OVERLAY_LAYER.load(Ordering::Relaxed);
+        if !overlay.is_null()
+            && !window_layer.is_null()
+            && OVERLAY_WINDOW_LAYER.load(Ordering::Relaxed) != window_layer
+        {
+            msg0(overlay, sel("removeFromSuperlayer"));
+            msg0(overlay, sel("release"));
+            OVERLAY_LAYER.store(std::ptr::null_mut(), Ordering::Relaxed);
+            overlay = std::ptr::null_mut();
+        }
+
+        // Create the overlay layer on first use (or after a window change).
         if overlay.is_null() && !window_layer.is_null() {
             let new_layer = msg0(cls("CALayer"), sel("layer"));
             let new_layer = msg0(new_layer, sel("retain"));
@@ -443,6 +465,7 @@ extern "C" fn present_on_main(ctx: *mut std::os::raw::c_void) {
             }
             msg1(window_layer, sel("addSublayer:"), new_layer);
             OVERLAY_LAYER.store(new_layer, Ordering::Relaxed);
+            OVERLAY_WINDOW_LAYER.store(window_layer, Ordering::Relaxed);
             overlay = new_layer;
         }
 
