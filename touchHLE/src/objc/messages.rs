@@ -358,14 +358,20 @@ Type mismatch when sending message {} to {:?}!
             is_metaclass,
         }) = host_object.as_any().downcast_ref()
         {
-            log!(
-                "Call to faked class \"{}\" ({:?}) {} method \"{}\". Behaving as if message was sent to nil.",
+            log_dbg!(
+                "Call to faked class \"{}\" ({:?}) {} method \"{}\". Returning receiver (self) so cascading calls don't nil-deref.",
                 name,
                 class,
                 if is_metaclass { "class" } else { "instance" },
                 selector.as_str(&env.mem),
             );
-            env.cpu.regs_mut()[0..2].fill(0);
+            // Return the receiver itself (the fake object) instead of nil.
+            // This prevents cascading nil-dereferences: the game stores the
+            // return value and later sends messages to it or accesses fields.
+            // With nil it crashes; with self it gets another fake that absorbs
+            // the next call, and so on — the entire SDK call chain no-ops
+            // gracefully. (Previously this was `fill(0)` → nil → crash.)
+            env.cpu.regs_mut()[0] = receiver.to_bits();
             return;
         } else {
             panic!(

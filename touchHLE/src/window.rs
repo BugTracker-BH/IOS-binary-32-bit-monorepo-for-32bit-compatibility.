@@ -1189,6 +1189,7 @@ pub struct Window {
     splash_image: Option<Image>,
     device_family: DeviceFamily,
     device_orientation: DeviceOrientation,
+    force_portrait: bool,
     controller_ctx: sdl2::GameControllerSubsystem,
     controllers: Vec<sdl2::controller::GameController>,
     dpad_state: DpadState,
@@ -1358,6 +1359,7 @@ impl Window {
             splash_image: launch_image,
             device_family,
             device_orientation,
+            force_portrait: options.force_portrait,
             controller_ctx,
             controllers: Vec::new(),
             dpad_state: DpadState {
@@ -2448,6 +2450,18 @@ impl Window {
     pub fn rotate_device(&mut self, new_orientation: DeviceOrientation) {
         assert!(self.on_main_stack);
         if new_orientation == self.device_orientation {
+            return;
+        }
+        // If force_portrait is set (user chose "Portrait" in Quick Options),
+        // ignore any game request to switch to landscape — the game stays in
+        // the portrait letterboxed view. Useful for portrait-only apps and for
+        // users who prefer holding the device upright.
+        if self.force_portrait
+            && matches!(
+                new_orientation,
+                DeviceOrientation::LandscapeLeft | DeviceOrientation::LandscapeRight
+            )
+        {
             return;
         }
 

@@ -541,10 +541,10 @@ fn app_picker_inner(
             env,
             buttons,
             value.map_or(0, |v| match v {
+                DeviceOrientation::Portrait => 0,
                 DeviceOrientation::LandscapeLeft => 1,
                 DeviceOrientation::LandscapeRight => 2,
                 DeviceOrientation::PortraitUpsideDown => 3,
-                _ => panic!(),
             }),
         );
     }
@@ -675,7 +675,9 @@ fn app_picker_inner(
                 quick_options_scale_hack,
             );
         } else if std::mem::take(&mut host_obj.orientation_default) {
-            quick_options_orientation = None;
+            // On iOS "Default" = force portrait (the game naturally goes
+            // landscape, so this button lets the user override to portrait).
+            quick_options_orientation = Some(DeviceOrientation::Portrait);
             update_orientation_buttons(
                 env,
                 &quick_options_stuff.orientation_buttons,
@@ -724,7 +726,7 @@ fn app_picker_inner(
                 DeviceOrientation::LandscapeLeft => "--landscape-left",
                 DeviceOrientation::LandscapeRight => "--landscape-right",
                 DeviceOrientation::PortraitUpsideDown => "--upside-down",
-                _ => todo!(),
+                DeviceOrientation::Portrait => "--force-portrait",
             }
             .to_string(),
         );
