@@ -13,6 +13,7 @@ mod generic_char;
 
 pub mod arpa;
 pub mod clocale;
+pub mod crt;
 pub mod crypto;
 pub mod ctype;
 pub mod cxxabi;
@@ -51,12 +52,18 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/usr/lib/libSystem.B.dylib",
     aliases: &["/usr/lib/libSystem.dylib"],
     class_exports: &[],
-    constant_exports: &[ctype::CONSTANTS, stdio::CONSTANTS, mach::init::CONSTANTS],
+    constant_exports: &[
+        crt::CONSTANTS,
+        ctype::CONSTANTS,
+        stdio::CONSTANTS,
+        mach::init::CONSTANTS,
+    ],
     function_exports: &[
         arpa::inet::FUNCTIONS,
         clocale::FUNCTIONS,
         ctype::FUNCTIONS,
         cxxabi::FUNCTIONS,
+        crt::FUNCTIONS,
         crypto::FUNCTIONS,
         dirent::FUNCTIONS,
         dlfcn::FUNCTIONS,
