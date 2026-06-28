@@ -470,6 +470,15 @@ const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminate
 /// Other app notifications
 const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
     "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationLaunchOptionsLocalNotificationKey: &str =
+    "UIApplicationLaunchOptionsLocalNotificationKey";
+const UIApplicationLaunchOptionsURLKey: &str = "UIApplicationLaunchOptionsURLKey";
+const UIApplicationLaunchOptionsSourceApplicationKey: &str =
+    "UIApplicationLaunchOptionsSourceApplicationKey";
+const UIApplicationLaunchOptionsAnnotationKey: &str =
+    "UIApplicationLaunchOptionsAnnotationKey";
+const UIApplicationLaunchOptionsLocationKey: &str =
+    "UIApplicationLaunchOptionsLocationKey";
 const UIApplicationDidReceiveMemoryWarningNotification: &str =
     "UIApplicationDidReceiveMemoryWarningNotification";
 
@@ -507,6 +516,26 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_UIApplicationLaunchOptionsRemoteNotificationKey",
         HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocalNotificationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocalNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsURLKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsURLKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsSourceApplicationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsSourceApplicationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsAnnotationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsAnnotationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocationKey),
     ),
 ];
 

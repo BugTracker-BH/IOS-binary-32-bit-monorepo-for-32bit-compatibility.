@@ -593,12 +593,23 @@ impl Dyld {
                 continue;
             }
 
+            // Unresolved external data symbol — typically an `NSString * const`
+            // we don't provide (a UIKit/Foundation key or notification name).
+            // Leaving the slot NULL makes the guest crash the first time it
+            // dereferences the constant (`ldr rN,[slot]` → NULL → `ldr,[rN]`).
+            // Instead, bind a placeholder empty NSString so the reference
+            // resolves to a valid (if empty) object and the app degrades
+            // gracefully. Logged so missing-but-needed constants stay
+            // discoverable (and can be given real values later).
             log!(
-                "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
+                "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\" — binding empty-NSString placeholder",
                 symbol,
                 ptr_ptr,
                 bin.name
             );
+            static UNRESOLVED_DATA_PLACEHOLDER: HostConstant = HostConstant::NSString("");
+            self.constants_to_link_later
+                .push((ptr_ptr, &UNRESOLVED_DATA_PLACEHOLDER));
         }
 
         // FIXME: check for internal relocations?
