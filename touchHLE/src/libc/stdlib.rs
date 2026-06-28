@@ -329,8 +329,12 @@ fn exit(env: &mut Environment, exit_code: i32) {
 fn abort(env: &mut Environment) {
     echo!("App called abort()! Guest stack trace at the abort call:");
     env.stack_trace_current();
-    echo!("Terminating due to guest abort().");
-    std::process::exit(134);
+    // Panic (rather than process::exit) so touchHLE shows its usual crash
+    // pop-up explaining what happened, instead of silently closing.
+    panic!(
+        "Guest called abort() — likely an uncaught C++/Boost exception or a failed \
+         assertion (see guest stack trace in the log)"
+    );
 }
 
 /// `void __assert_rtn(const char *func, const char *file, int line, const char *expr)`
@@ -355,8 +359,8 @@ fn __assert_rtn(
         line
     );
     env.stack_trace_current();
-    echo!("Terminating due to guest assertion failure.");
-    std::process::exit(134);
+    // Panic so touchHLE shows its crash pop-up with the failed assertion.
+    panic!("Guest assertion failed: ({expr_s}) in {func_s} at {file_s}:{line}");
 }
 
 fn bsearch(
