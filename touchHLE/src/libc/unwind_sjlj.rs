@@ -23,7 +23,7 @@
 //! offsets ([JBUF_FP]/[JBUF_PC]/[JBUF_SP]) are an assumption — they are logged
 //! at install time so they can be corrected from device logs.
 
-use crate::abi::{self, GuestFunction};
+use crate::abi::{self, CallFromHost, GuestFunction};
 use crate::cpu::Cpu;
 use crate::dyld::{export_c_func, FunctionExports};
 use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
@@ -111,16 +111,18 @@ fn _Unwind_GetLanguageSpecificData(env: &mut Environment, ctx: MutVoidPtr) -> Mu
     Ptr::from_bits(r32(env, ctx.to_bits() + FC_LSDA))
 }
 fn _Unwind_GetIP(env: &mut Environment, ctx: MutVoidPtr) -> u32 {
-    r32(env, ctx.to_bits() + FC_CALL_SITE)
+    // GCC SjLj convention (unwind-sjlj.c): GetIP returns call_site + 1.
+    r32(env, ctx.to_bits() + FC_CALL_SITE).wrapping_add(1)
 }
 fn _Unwind_GetIPInfo(env: &mut Environment, ctx: MutVoidPtr, ip_before: MutVoidPtr) -> u32 {
     if !ip_before.is_null() {
         w32(env, ip_before.to_bits(), 1);
     }
-    r32(env, ctx.to_bits() + FC_CALL_SITE)
+    r32(env, ctx.to_bits() + FC_CALL_SITE).wrapping_add(1)
 }
 fn _Unwind_SetIP(env: &mut Environment, ctx: MutVoidPtr, ip: u32) {
-    w32(env, ctx.to_bits() + FC_CALL_SITE, ip);
+    // GCC SjLj convention: the stored call_site is IP - 1.
+    w32(env, ctx.to_bits() + FC_CALL_SITE, ip.wrapping_sub(1));
 }
 fn _Unwind_GetGR(env: &mut Environment, ctx: MutVoidPtr, index: i32) -> u32 {
     r32(env, ctx.to_bits() + FC_DATA + (index as u32) * 4)
@@ -130,6 +132,10 @@ fn _Unwind_SetGR(env: &mut Environment, ctx: MutVoidPtr, index: i32, value: u32)
 }
 fn _Unwind_GetRegionStart(_env: &mut Environment, _ctx: MutVoidPtr) -> u32 {
     0 // SjLj has no region start; call-site indices are absolute
+}
+fn _Unwind_GetCFA(env: &mut Environment, ctx: MutVoidPtr) -> u32 {
+    // CFA ~= the stack pointer saved in the setjmp buffer (jbuf[2]).
+    r32(env, ctx.to_bits() + JBUF_SP)
 }
 fn _Unwind_GetDataRelBase(env: &mut Environment, ctx: MutVoidPtr) -> u32 {
     // For SjLj the "data rel base" is data[0] (set up by the caller).
@@ -255,7 +261,7 @@ fn _Unwind_SjLj_Resume(env: &mut Environment, exc: MutVoidPtr) {
 }
 
 fn _Unwind_SjLj_ForcedUnwind(
-    env: &mut Environment,
+    _env: &mut Environment,
     exc: MutVoidPtr,
     _stop: GuestFunction,
     _stop_arg: MutVoidPtr,
@@ -279,6 +285,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_Unwind_GetGR(_, _)),
     export_c_func!(_Unwind_SetGR(_, _, _)),
     export_c_func!(_Unwind_GetRegionStart(_)),
+    export_c_func!(_Unwind_GetCFA(_)),
     export_c_func!(_Unwind_GetDataRelBase(_)),
     export_c_func!(_Unwind_GetTextRelBase(_)),
     export_c_func!(_Unwind_DeleteException(_)),

@@ -47,6 +47,30 @@ struct AppInfo {
     icon_ui_image: Option<id>,
 }
 
+/// Match a `touchhle://run?app=NAME` deep-link request against an enumerated
+/// app. Accepts the bundle file name (`JellyCar2.app`), that name without the
+/// extension (`JellyCar2`), or the display name (`JellyCar 2`) — all
+/// case-insensitive, so Shortcuts can use whichever is convenient.
+#[cfg(target_os = "ios")]
+fn app_matches_deeplink(app: &AppInfo, requested: &str) -> bool {
+    let req = requested.trim();
+    let file_name = app
+        .path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned());
+    let file_stem = app
+        .path
+        .file_stem()
+        .map(|n| n.to_string_lossy().into_owned());
+    file_name
+        .as_deref()
+        .map_or(false, |f| f.eq_ignore_ascii_case(req))
+        || file_stem
+            .as_deref()
+            .map_or(false, |f| f.eq_ignore_ascii_case(req))
+        || app.display_name.eq_ignore_ascii_case(req)
+}
+
 pub fn app_picker(options: Options) -> Result<(PathBuf, Vec<String>), String> {
     // iOS: log whether the native Home Screen-icon route is feasible on this
     // device (see window::ios_probe_home_screen_capability). Findings appear in
@@ -600,6 +624,22 @@ fn app_picker_inner(
         if let Some(imported) = crate::window::ios_take_imported_app() {
             echo!("Launching imported app: {}", imported.display());
             break imported;
+        }
+        // iOS: a `touchhle://run?app=NAME` deep link (e.g. triggered by an iOS
+        // Shortcut's "Open URL" action) requests launching a specific installed
+        // app. Resolve the name against the enumerated apps and launch it.
+        #[cfg(target_os = "ios")]
+        if let Some(requested) = crate::window::ios_take_requested_launch() {
+            if let Ok(list) = apps.as_ref() {
+                if let Some(app) = list.iter().find(|a| app_matches_deeplink(a, &requested)) {
+                    echo!("Launching via deep link: {}", app.path.display());
+                    break app.path.clone();
+                }
+            }
+            log!(
+                "Deep link requested unknown app {:?} (not found in apps dir); ignoring",
+                requested
+            );
         }
         let host_obj = env.objc.borrow_mut::<AppPickerDelegateHostObject>(delegate);
         let icon_tapped = std::mem::take(&mut host_obj.icon_tapped);

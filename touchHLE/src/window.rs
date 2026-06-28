@@ -1050,6 +1050,72 @@ pub fn ios_take_imported_app() -> Option<std::path::PathBuf> {
     ios_ipa_picker::take_imported_app()
 }
 
+/// iOS deep-link launch: a `touchhle://run?app=NAME` URL — e.g. opened by an iOS
+/// Shortcut's "Open URL" action, LiveContainer-style — requests launching a
+/// specific installed app inside the emulator. SDL hands such URLs to its app
+/// delegate's `application:openURL:`, which it forwards as an `SDL_DROPFILE`
+/// event; [Window::poll_for_events] parses it via [handle_possible_deeplink].
+/// The app-picker run loop polls [ios_take_requested_launch] and launches the
+/// named app.
+static REQUESTED_DEEPLINK_APP: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Parse a `touchhle://run?app=<percent-encoded name>` URL and record the
+/// requested app name. No-op for anything else (e.g. a real dropped file path
+/// on desktop), so it is safe to call for every `SDL_DROPFILE`.
+fn handle_possible_deeplink(s: &str) {
+    let Some(rest) = s.strip_prefix("touchhle://") else {
+        return;
+    };
+    // `rest` is e.g. "run?app=JellyCar2.app"
+    let query = rest.split_once('?').map_or(rest, |(_, q)| q);
+    for kv in query.split('&') {
+        if let Some(v) = kv.strip_prefix("app=") {
+            let name = percent_decode(v);
+            log!("Deep link requested launch of app: {:?}", name);
+            *REQUESTED_DEEPLINK_APP.lock().unwrap() = Some(name);
+            return;
+        }
+    }
+    log!("Deep link {:?} had no app= parameter; ignoring", s);
+}
+
+/// iOS: take the app name requested via a `touchhle://run?app=` deep link, if any.
+#[cfg(target_os = "ios")]
+pub fn ios_take_requested_launch() -> Option<String> {
+    REQUESTED_DEEPLINK_APP.lock().unwrap().take()
+}
+
+/// Minimal percent-decoding for deep-link query values (handles `%XX` and `+`).
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'%' if i + 2 < b.len() => {
+                let hi = (b[i + 1] as char).to_digit(16);
+                let lo = (b[i + 2] as char).to_digit(16);
+                if let (Some(hi), Some(lo)) = (hi, lo) {
+                    out.push((hi * 16 + lo) as u8);
+                    i += 3;
+                    continue;
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
 /// iOS: probe whether the genuinely-native Home Screen icon route (generate a
 /// per-game `.app` bundle and register it with SpringBoard via `uicache`) is
 /// even possible from inside touchHLE's sandbox on this device. iOS forbids an
@@ -1662,6 +1728,12 @@ impl Window {
                 } => {
                     let (x, y) = transform_virt_accel_coords(self, (x, y));
                     self.virtual_accelerometer_last = Some((x, y, false));
+                }
+                // iOS delivers `touchhle://run?app=...` deep links (and desktop
+                // delivers real file drops) as a DROPFILE event. Parse our
+                // scheme here; non-matching strings are ignored.
+                E::DropFile { ref filename, .. } => {
+                    handle_possible_deeplink(filename);
                 }
                 _ => {}
             }
