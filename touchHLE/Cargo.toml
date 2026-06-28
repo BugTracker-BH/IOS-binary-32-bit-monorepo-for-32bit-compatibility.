@@ -43,9 +43,6 @@ hound = "3.5.0"
 mach_object = "0.1.17"
 plist = "1.8.0"
 zip = { version = "0.6.4", default-features = false, features = ["deflate"] }
-# PNG encoding for Home Screen web-clip icons (iOS "Pin to Home"). Pure Rust
-# (uses miniz_oxide), so it cross-compiles for iOS like flate2/zip already do.
-png = "0.17"
 rusttype = "0.9.3"
 # Needed so we can access underlying OwnedFace from rusttype
 # (bump version if rusttype is updated!)
