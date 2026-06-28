@@ -139,6 +139,50 @@ pub(super) fn closedir(env: &mut Environment, dirp: MutPtr<DIR>) -> i32 {
     0 // Success
 }
 
+pub(super) fn rewinddir(env: &mut Environment, dirp: MutPtr<DIR>) {
+    let mut dir = env.mem.read(dirp);
+    dir.idx = 0;
+    env.mem.write(dirp, dir);
+    log_dbg!("rewinddir: dirp {:?} reset to start", dirp);
+}
+
+/// Reentrant `readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)`:
+/// fill the caller-provided `entry`, set `*result` to it (or NULL at the end of
+/// the directory), and return 0 on success.
+pub(super) fn readdir_r(
+    env: &mut Environment,
+    dirp: MutPtr<DIR>,
+    entry: MutPtr<dirent>,
+    result: MutPtr<MutPtr<dirent>>,
+) -> i32 {
+    set_errno(env, 0);
+    let mut dir = env.mem.read(dirp);
+    let vec = env.libc_state.dirent.open_dirs.get(&dirp).unwrap();
+    if let Some((str, type_)) = vec.get(dir.idx) {
+        let len = str.len();
+        let d_type = match type_ {
+            FsNodeType::File => DT_REG,
+            FsNodeType::Directory => DT_DIR,
+        };
+        let mut d = dirent {
+            d_ino: 0,
+            d_seekoff: 0,
+            d_reclen: 0,
+            d_namlen: len as u16,
+            d_type,
+            d_name: [b'\0'; MAXPATHLEN],
+        };
+        d.d_name[..len].copy_from_slice(str.as_bytes());
+        env.mem.write(entry, d);
+        env.mem.write(result, entry);
+        dir.idx += 1;
+        env.mem.write(dirp, dir);
+    } else {
+        env.mem.write(result, Ptr::null());
+    }
+    0
+}
+
 fn scandir(
     env: &mut Environment,
     dirname: ConstPtr<u8>,
@@ -186,6 +230,8 @@ fn scandir(
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(opendir(_)),
     export_c_func!(readdir(_)),
+    export_c_func!(readdir_r(_, _, _)),
+    export_c_func!(rewinddir(_)),
     export_c_func!(closedir(_)),
     export_c_func!(scandir(_, _, _, _)),
 ];
