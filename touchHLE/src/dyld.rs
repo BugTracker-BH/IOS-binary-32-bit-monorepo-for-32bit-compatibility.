@@ -830,6 +830,26 @@ impl Dyld {
             }
         }
 
+        // Some unimplemented functions are NORETURN: they must terminate, not
+        // return 0. A no-op `abort`/terminate lets the failure path run on into
+        // undefined behavior (which surfaced as a generic MemoryError). The
+        // common ones (abort, __assert_rtn) are implemented for real in libc
+        // with stack traces; this denylist catches any other fatal terminator
+        // we don't provide, so it fails loudly instead of silently continuing.
+        const NORETURN_FUNCS: &[&str] = &[
+            "___cxa_pure_virtual",
+            "__ZSt9terminatev",
+            "_abort_report_np",
+            "___cxa_call_unexpected",
+        ];
+        if NORETURN_FUNCS.contains(&symbol) {
+            panic!(
+                "Guest called noreturn function {symbol}, which touchHLE doesn't implement \
+                 (likely a failed assertion or unhandled C++ exception). Terminating rather \
+                 than continuing into undefined behavior."
+            );
+        }
+
         // Unimplemented function: rather than crashing, bind it to a no-op
         // stub that ignores its arguments and returns 0, so the app degrades
         // gracefully instead of dying ("Call to unimplemented function ..."). The

@@ -321,6 +321,44 @@ fn exit(env: &mut Environment, exit_code: i32) {
     std::process::exit(exit_code);
 }
 
+/// `void abort(void)` — noreturn. The app calls this at an unrecoverable point
+/// (failed assertion, uncaught C++/Boost exception via `std::terminate`, etc.).
+/// It must NOT return: a no-op `abort` lets the failure path run on into garbage
+/// (which previously manifested as a generic MemoryError). Dump the guest stack
+/// so we can see what triggered it, then terminate.
+fn abort(env: &mut Environment) {
+    echo!("App called abort()! Guest stack trace at the abort call:");
+    env.stack_trace_current();
+    echo!("Terminating due to guest abort().");
+    std::process::exit(134);
+}
+
+/// `void __assert_rtn(const char *func, const char *file, int line, const char *expr)`
+/// — the failed-assertion handler. Noreturn; report which assertion failed and
+/// the guest stack, then terminate.
+#[allow(non_snake_case)]
+fn __assert_rtn(
+    env: &mut Environment,
+    func: ConstPtr<u8>,
+    file: ConstPtr<u8>,
+    line: i32,
+    expr: ConstPtr<u8>,
+) {
+    let func_s = env.mem.cstr_at_utf8(func).unwrap_or("?").to_owned();
+    let file_s = env.mem.cstr_at_utf8(file).unwrap_or("?").to_owned();
+    let expr_s = env.mem.cstr_at_utf8(expr).unwrap_or("?").to_owned();
+    echo!(
+        "Assertion failed: ({}), function {}, file {}, line {}.",
+        expr_s,
+        func_s,
+        file_s,
+        line
+    );
+    env.stack_trace_current();
+    echo!("Terminating due to guest assertion failure.");
+    std::process::exit(134);
+}
+
 fn bsearch(
     env: &mut Environment,
     key: ConstVoidPtr,
@@ -602,6 +640,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(setenv(_, _, _)),
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
+    export_c_func!(abort()),
+    export_c_func!(__assert_rtn(_, _, _, _)),
     export_c_func!(bsearch(_, _, _, _, _)),
     export_c_func!(strtof(_, _)),
     export_c_func!(strtoul(_, _, _)),
