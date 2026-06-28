@@ -64,6 +64,17 @@ pub struct HostDylib {
 
 pub type HostFunction = &'static dyn CallFromGuest;
 
+/// No-op fallback for an unimplemented guest-called function: ignore all
+/// arguments and return 0. Bound to any otherwise-unresolved lazy symbol by
+/// [Dyld::get_svc_handler] so the app degrades gracefully instead of crashing.
+fn unimplemented_function_stub(_env: &mut Environment) -> i32 {
+    0
+}
+
+/// [HostFunction] wrapper around [unimplemented_function_stub].
+const UNIMPLEMENTED_FUNCTION_STUB: HostFunction =
+    &(unimplemented_function_stub as fn(&mut Environment) -> i32);
+
 /// Type for lists of functions exported by host implementations of dynamic
 /// libraries (usually frameworks).
 ///
@@ -819,7 +830,34 @@ impl Dyld {
             }
         }
 
-        panic!("Call to unimplemented function {symbol}");
+        // Unimplemented function: rather than crashing, bind it to a no-op
+        // stub that ignores its arguments and returns 0, so the app degrades
+        // gracefully instead of dying ("Call to unimplemented function ..."). The
+        // ObjC ARC family — the one set that must NOT no-op (e.g. objc_retain
+        // must return its argument) — is implemented for real (src/objc/arc.rs),
+        // so it never reaches here. Logged so missing functions stay
+        // discoverable. Caveats: if the app dereferences a (now-zero) return
+        // value it will null-deref slightly later (caught by the symbolicating
+        // crash dump), and a no-op'd async/dispatch can stall a feature —
+        // acceptable for best-effort compatibility. Mirrors the host-function
+        // linking path above, substituting the no-op stub.
+        log!("Warning: call to unimplemented function {symbol} — returning 0 (best-effort no-op stub)");
+        let f = UNIMPLEMENTED_FUNCTION_STUB;
+        let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
+        let mut svc = idx + Self::SVC_LINKED_FUNCTIONS_BASE;
+        if info.entry_size == 4 {
+            assert!(svc < Self::SVC_LAZY_LINK_RET_FLAG);
+            svc |= Self::SVC_LAZY_LINK_RET_FLAG;
+        }
+        self.linked_host_functions
+            .push(("_touchHLE_unimplemented_function", f));
+        let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
+        mem.write(stub_function_ptr, encode_a32_svc(svc));
+        if info.entry_size != 4 {
+            assert!(mem.read(stub_function_ptr + 1) == encode_a32_ret());
+        }
+        cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
+        Some(f)
     }
 
     /// Creates a guest function that will call a host function with the name
