@@ -86,6 +86,14 @@ fn w32(env: &mut Environment, addr: u32, val: u32) {
 // ---- chain maintenance ------------------------------------------------------
 
 fn _Unwind_SjLj_Register(env: &mut Environment, fc: MutVoidPtr) {
+    // Log only the first call: this fires at the entry of every EH function, so
+    // logging each would flood the log. Its appearance confirms the host SjLj
+    // unwinder is actually linked and active (distinguishing "not in build" from
+    // "throw path never reaches RaiseException").
+    static LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        log!("[eh-sjlj] _Unwind_SjLj_Register first call — host SjLj unwinder is active");
+    }
     let fc = fc.to_bits();
     let prev = head(env);
     w32(env, fc + FC_PREV, prev); // fc->prev = head
