@@ -1050,6 +1050,241 @@ pub fn ios_take_imported_app() -> Option<std::path::PathBuf> {
     ios_ipa_picker::take_imported_app()
 }
 
+/// Deep-link launch request parsed from a `touchhle://run?app=NAME` URL. On iOS
+/// the system delivers such a URL to SDL's app delegate, which forwards it as an
+/// `SDL_DROPFILE` event; [Window::poll_for_events] parses it here. The app
+/// picker run loop polls [ios_take_requested_launch] and launches the named app.
+static REQUESTED_DEEPLINK_APP: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// Parse a `touchhle://run?app=<percent-encoded name>` URL and, if valid, record
+/// the requested app name. No-op for any other string (e.g. a real dropped file
+/// path on desktop), so it is safe to call for every `SDL_DROPFILE`.
+fn handle_possible_deeplink(s: &str) {
+    let Some(rest) = s.strip_prefix("touchhle://") else {
+        return;
+    };
+    // `rest` is e.g. "run?app=JellyCar2.app"
+    let Some((_action, query)) = rest.split_once('?') else {
+        return;
+    };
+    for kv in query.split('&') {
+        if let Some(v) = kv.strip_prefix("app=") {
+            let name = percent_decode(v);
+            log!("Deep link requested launch of app: {:?}", name);
+            *REQUESTED_DEEPLINK_APP.lock().unwrap() = Some(name);
+            return;
+        }
+    }
+}
+
+/// Take the app name requested via a `touchhle://` deep link, if any.
+pub fn ios_take_requested_launch() -> Option<String> {
+    REQUESTED_DEEPLINK_APP.lock().unwrap().take()
+}
+
+/// Minimal percent-decoding for deep-link query values (handles `%XX` and `+`).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' if i + 2 < bytes.len() => {
+                let hi = (bytes[i + 1] as char).to_digit(16);
+                let lo = (bytes[i + 2] as char).to_digit(16);
+                if let (Some(hi), Some(lo)) = (hi, lo) {
+                    out.push((hi * 16 + lo) as u8);
+                    i += 3;
+                    continue;
+                }
+                out.push(b'%');
+                i += 1;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+// ============================================================================
+// iOS "Pin to Home" web-clip profile installer.
+//
+// iOS does not let an app create Home Screen icons directly. The supported
+// trick is to hand the system a configuration profile (.mobileconfig) carrying
+// a `com.apple.webClip.managed` payload (label + icon + target URL). The user
+// is prompted to install it, which creates a real Home Screen icon that opens
+// our `touchhle://` URL. Profiles must be delivered through Safari, so we serve
+// the bytes from a throwaway localhost HTTP server and open that URL.
+//
+// All Obj-C here is the *host* runtime (real iOS UIKit). Everything fails
+// gracefully (no panics) so a problem just means "nothing was installed".
+// ============================================================================
+#[cfg(target_os = "ios")]
+mod ios_profile_installer {
+    use std::ffi::{c_void, CString};
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::os::raw::c_char;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    type Id = *mut c_void;
+    type Sel = *mut c_void;
+
+    static PENDING_URL: Mutex<Option<String>> = Mutex::new(None);
+
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> Id;
+        fn sel_registerName(name: *const c_char) -> Sel;
+        fn objc_msgSend();
+        static _dispatch_main_q: c_void;
+        fn dispatch_async_f(
+            queue: *const c_void,
+            context: *mut c_void,
+            work: extern "C" fn(*mut c_void),
+        );
+    }
+
+    unsafe fn sel(s: &str) -> Sel {
+        sel_registerName(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn cls(s: &str) -> Id {
+        objc_getClass(CString::new(s).unwrap().as_ptr())
+    }
+    unsafe fn msg0(o: Id, s: Sel) -> Id {
+        if o.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: extern "C" fn(Id, Sel) -> Id = std::mem::transmute(objc_msgSend as *const ());
+        f(o, s)
+    }
+    unsafe fn ns_str(s: &str) -> Id {
+        let c = CString::new(s).unwrap_or_default();
+        let f: extern "C" fn(Id, Sel, *const c_char) -> Id =
+            std::mem::transmute(objc_msgSend as *const ());
+        f(cls("NSString"), sel("stringWithUTF8String:"), c.as_ptr())
+    }
+
+    // Runs on the main thread: open the localhost URL in Safari so iOS offers to
+    // install the downloaded configuration profile.
+    extern "C" fn open_url_on_main(_ctx: *mut c_void) {
+        unsafe {
+            let url_string = match PENDING_URL.lock().unwrap().take() {
+                Some(u) => u,
+                None => return,
+            };
+            let url = {
+                let f: extern "C" fn(Id, Sel, Id) -> Id =
+                    std::mem::transmute(objc_msgSend as *const ());
+                f(cls("NSURL"), sel("URLWithString:"), ns_str(&url_string))
+            };
+            if url.is_null() {
+                eprintln!("[ios] web-clip: failed to build NSURL");
+                return;
+            }
+            let app = msg0(cls("UIApplication"), sel("sharedApplication"));
+            if app.is_null() {
+                eprintln!("[ios] web-clip: no UIApplication");
+                return;
+            }
+            let options = msg0(cls("NSDictionary"), sel("dictionary"));
+            // -[UIApplication openURL:options:completionHandler:] (iOS 10+)
+            let f: extern "C" fn(Id, Sel, Id, Id, Id) =
+                std::mem::transmute(objc_msgSend as *const ());
+            f(
+                app,
+                sel("openURL:options:completionHandler:"),
+                url,
+                options,
+                std::ptr::null_mut(),
+            );
+            eprintln!("[ios] web-clip: opened {url_string} (Safari will offer to install the profile)");
+        }
+    }
+
+    pub fn install(profile_bytes: Vec<u8>) {
+        let listener = match TcpListener::bind("127.0.0.1:0") {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("[ios] web-clip: cannot bind localhost: {e}");
+                return;
+            }
+        };
+        let port = match listener.local_addr() {
+            Ok(a) => a.port(),
+            Err(e) => {
+                eprintln!("[ios] web-clip: no local addr: {e}");
+                return;
+            }
+        };
+        let url = format!("http://127.0.0.1:{port}/touchHLE.mobileconfig");
+        *PENDING_URL.lock().unwrap() = Some(url.clone());
+
+        // Serve the profile to Safari from a short-lived background thread.
+        std::thread::spawn(move || {
+            listener.set_nonblocking(true).ok();
+            let deadline = Instant::now() + Duration::from_secs(120);
+            let mut served = 0;
+            while Instant::now() < deadline && served < 8 {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        stream.set_nonblocking(false).ok();
+                        stream
+                            .set_read_timeout(Some(Duration::from_millis(500)))
+                            .ok();
+                        let mut buf = [0u8; 1024];
+                        let _ = stream.read(&mut buf); // discard the request
+                        let header = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/x-apple-aspen-config\r\nContent-Disposition: attachment; filename=\"touchHLE.mobileconfig\"\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            profile_bytes.len()
+                        );
+                        let _ = stream.write_all(header.as_bytes());
+                        let _ = stream.write_all(&profile_bytes);
+                        let _ = stream.flush();
+                        served += 1;
+                        eprintln!(
+                            "[ios] web-clip: served profile ({} bytes)",
+                            profile_bytes.len()
+                        );
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                    Err(e) => {
+                        eprintln!("[ios] web-clip: accept error: {e}");
+                        break;
+                    }
+                }
+            }
+            eprintln!("[ios] web-clip: server thread exiting (served {served})");
+        });
+
+        // Opening a URL is a UIKit operation and must run on the main thread; the
+        // guest/launcher runs on a coroutine stack, so hop onto the main queue.
+        unsafe {
+            dispatch_async_f(
+                &_dispatch_main_q as *const c_void,
+                std::ptr::null_mut(),
+                open_url_on_main,
+            );
+        }
+    }
+}
+
+/// iOS: install a Home Screen web-clip configuration profile (already serialized
+/// to `.mobileconfig` bytes). See [ios_profile_installer].
+#[cfg(target_os = "ios")]
+pub fn ios_install_web_clip_profile(profile_bytes: Vec<u8>) {
+    ios_profile_installer::install(profile_bytes);
+}
+
 /// Tell SDL2 what orientation we want. Only useful on Android.
 fn set_sdl2_orientation(orientation: DeviceOrientation) {
     // Despite the name, this hint works on Android too.
@@ -1595,6 +1830,13 @@ impl Window {
                 } => {
                     let (x, y) = transform_virt_accel_coords(self, (x, y));
                     self.virtual_accelerometer_last = Some((x, y, false));
+                }
+                // iOS delivers `touchhle://` deep links (and a real file drop on
+                // desktop) as a DROPFILE event. Parse our scheme here; non-matching
+                // strings are ignored. The event then falls through to be dropped
+                // by the mapping match below (`_ => continue`).
+                E::DropFile { ref filename, .. } => {
+                    handle_possible_deeplink(filename);
                 }
                 _ => {}
             }

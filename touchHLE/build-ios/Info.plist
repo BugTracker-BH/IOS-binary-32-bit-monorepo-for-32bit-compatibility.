@@ -21,5 +21,14 @@
     <string>UIInterfaceOrientationLandscapeRight</string>
     <string>UIInterfaceOrientationPortrait</string>
   </array>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>org.touchhle.ios.run</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>touchhle</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>

@@ -126,6 +126,193 @@ fn enumerate_apps(apps_dir: &Path) -> Result<Vec<AppInfo>, std::io::Error> {
     Ok(apps)
 }
 
+/// Build the deep-link app identifier for `app`: its on-disk bundle file name
+/// (e.g. `JellyCar2.app`), which is stable and unique within the apps dir. Used
+/// both when generating a Home Screen web clip and when resolving an incoming
+/// `touchhle://run?app=NAME` deep link.
+#[cfg(target_os = "ios")]
+fn app_deeplink_name(app: &AppInfo) -> String {
+    app.path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| app.display_name.clone())
+}
+
+/// Whether `app` is the target of a `touchhle://run?app=<requested>` deep link.
+/// Matches the on-disk file name (what we encode) first, then the display name,
+/// both case-insensitively.
+#[cfg(target_os = "ios")]
+fn app_matches_deeplink(app: &AppInfo, requested: &str) -> bool {
+    let req = requested.trim();
+    app_deeplink_name(app).eq_ignore_ascii_case(req)
+        || app.display_name.eq_ignore_ascii_case(req)
+}
+
+/// Percent-encode a deep-link query value (keep RFC 3986 unreserved chars).
+#[cfg(target_os = "ios")]
+fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// Escape the five XML special characters for embedding in the plist.
+#[cfg(target_os = "ios")]
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Standard base64 (used to embed the icon PNG in the .mobileconfig).
+#[cfg(target_os = "ios")]
+fn base64_encode(data: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(T[((n >> 18) & 63) as usize] as char);
+        out.push(T[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            T[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// Build a UUID-formatted string deterministically from a seed plus the current
+/// time. Profiles only need well-formed, reasonably-unique UUIDs; this avoids a
+/// dependency on a real UUID/RNG crate.
+#[cfg(target_os = "ios")]
+fn pseudo_uuid(seed: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let mut h1 = std::collections::hash_map::DefaultHasher::new();
+    seed.hash(&mut h1);
+    nanos.hash(&mut h1);
+    let a = h1.finish();
+    let mut h2 = std::collections::hash_map::DefaultHasher::new();
+    a.hash(&mut h2);
+    seed.hash(&mut h2);
+    let b = h2.finish();
+    let bytes = a.to_be_bytes().into_iter().chain(b.to_be_bytes()).collect::<Vec<u8>>();
+    format!(
+        "{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
+/// Encode an icon to PNG bytes (RGBA8) for embedding in the web-clip payload.
+#[cfg(target_os = "ios")]
+fn encode_icon_png(image: &Image) -> Option<Vec<u8>> {
+    let (w, h) = image.dimensions();
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let mut out = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut out, w, h);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(image.pixels()).ok()?;
+    }
+    Some(out)
+}
+
+/// Serialize a `com.apple.webClip.managed` configuration profile that, when
+/// installed, adds a Home Screen icon launching `url` (a `touchhle://` deep
+/// link) with the given `label` and (optional) PNG `icon`.
+#[cfg(target_os = "ios")]
+fn build_web_clip_profile(label: &str, url: &str, icon_png: Option<&[u8]>) -> Vec<u8> {
+    let payload_uuid = pseudo_uuid(&format!("{label}|payload"));
+    let profile_uuid = pseudo_uuid(&format!("{label}|profile"));
+    let label_esc = xml_escape(label);
+    let url_esc = xml_escape(url);
+    let icon_xml = match icon_png {
+        Some(png) => format!(
+            "      <key>Icon</key>\n      <data>{}</data>\n",
+            base64_encode(png)
+        ),
+        None => String::new(),
+    };
+    let plist = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+<plist version=\"1.0\">\n\
+<dict>\n\
+  <key>PayloadContent</key>\n\
+  <array>\n\
+    <dict>\n\
+      <key>PayloadType</key><string>com.apple.webClip.managed</string>\n\
+      <key>PayloadVersion</key><integer>1</integer>\n\
+      <key>PayloadIdentifier</key><string>org.touchhle.webclip.{payload_uuid}</string>\n\
+      <key>PayloadUUID</key><string>{payload_uuid}</string>\n\
+      <key>PayloadDisplayName</key><string>{label_esc}</string>\n\
+      <key>URL</key><string>{url_esc}</string>\n\
+      <key>Label</key><string>{label_esc}</string>\n\
+      <key>IsRemovable</key><true/>\n\
+      <key>FullScreen</key><true/>\n\
+{icon_xml}\
+    </dict>\n\
+  </array>\n\
+  <key>PayloadType</key><string>Configuration</string>\n\
+  <key>PayloadVersion</key><integer>1</integer>\n\
+  <key>PayloadIdentifier</key><string>org.touchhle.webclip.profile.{profile_uuid}</string>\n\
+  <key>PayloadUUID</key><string>{profile_uuid}</string>\n\
+  <key>PayloadDisplayName</key><string>{label_esc} (touchHLE)</string>\n\
+  <key>PayloadDescription</key><string>Adds a Home Screen icon that launches this app in touchHLE.</string>\n\
+  <key>PayloadRemovalDisallowed</key><false/>\n\
+</dict>\n\
+</plist>\n"
+    );
+    plist.into_bytes()
+}
+
+/// Generate and present a Home Screen web-clip profile for `app`.
+#[cfg(target_os = "ios")]
+fn pin_app_to_home(app: &AppInfo) {
+    let url = format!("touchhle://run?app={}", percent_encode(&app_deeplink_name(app)));
+    let icon_png = app.icon.as_ref().and_then(encode_icon_png);
+    if icon_png.is_none() {
+        log!(
+            "Pin to Home: no icon available for {:?}; profile will use a default icon",
+            app.display_name
+        );
+    }
+    let profile = build_web_clip_profile(&app.display_name, &url, icon_png.as_deref());
+    echo!(
+        "Pin to Home: installing web clip for {:?} -> {} ({} byte profile)",
+        app.display_name,
+        url,
+        profile.len()
+    );
+    crate::window::ios_install_web_clip_profile(profile);
+}
+
 #[derive(Default)]
 struct AppPickerDelegateHostObject {
     icon_tapped: id,
@@ -148,6 +335,7 @@ struct AppPickerDelegateHostObject {
     network: Option<bool>,
     fullscreen: Option<bool>,
     force_portrait: Option<bool>,
+    pin_mode_toggle: bool,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -239,6 +427,9 @@ const CLASSES: ClassExports = objc_classes! {
 - (())forcePortrait:(id)switch { // UISwitch*
     let switch_state: bool = msg![env; switch isOn];
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).force_portrait = Some(switch_state);
+}
+- (())togglePinMode {
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).pin_mode_toggle = true;
 }
 
 - (())openFileManager {
@@ -481,25 +672,35 @@ fn app_picker_inner(
 
     let buttons_row_center = divider + (app_frame.size.height - divider) / 4.0;
     let buttons_row2_center = divider + (app_frame.size.height - divider) / 1.6;
-    make_button_row(
+    // First button row. On iOS we add a "Pin to Home" toggle so the user can add
+    // a Home Screen web-clip icon for a chosen game (see `pin_mode` in the run
+    // loop below).
+    let first_row: &[(&str, &str)] = if cfg!(target_os = "ios") {
+        &[
+            ("Load .ipa", "openFileManager"),
+            ("Quick options", "quickOptionsShow"),
+            ("Pin to Home", "togglePinMode"),
+        ]
+    } else {
+        &[
+            ("File manager", "openFileManager"),
+            ("Quick options", "quickOptionsShow"),
+        ]
+    };
+    let _first_row_buttons = make_button_row(
         env,
         delegate,
         main_view,
         app_frame.size,
         buttons_row_center,
-        &[
-            (
-                if cfg!(target_os = "ios") {
-                    "Load .ipa"
-                } else {
-                    "File manager"
-                },
-                "openFileManager",
-            ),
-            ("Quick options", "quickOptionsShow"),
-        ],
+        first_row,
         None,
     );
+    // Handle to the "Pin to Home" button so its title can reflect pin mode.
+    #[cfg(target_os = "ios")]
+    let pin_button: id = _first_row_buttons[2];
+    #[cfg(target_os = "ios")]
+    let mut pin_mode = false;
     make_button_row(
         env,
         delegate,
@@ -578,11 +779,40 @@ fn app_picker_inner(
             echo!("Launching imported app: {}", imported.display());
             break imported;
         }
+        // iOS: a `touchhle://run?app=NAME` deep link (e.g. tapping a Home Screen
+        // web clip created via "Pin to Home") requests launching a specific
+        // installed app by name. Resolve it against the enumerated apps.
+        #[cfg(target_os = "ios")]
+        if let Some(requested) = crate::window::ios_take_requested_launch() {
+            if let Ok(list) = apps.as_ref() {
+                if let Some(app) = list.iter().find(|a| app_matches_deeplink(a, &requested)) {
+                    echo!("Launching via deep link: {}", app.path.display());
+                    break app.path.clone();
+                }
+            }
+            log!(
+                "Deep link requested unknown app {:?}; not found in apps dir (ignoring)",
+                requested
+            );
+        }
         let host_obj = env.objc.borrow_mut::<AppPickerDelegateHostObject>(delegate);
         let icon_tapped = std::mem::take(&mut host_obj.icon_tapped);
         if icon_tapped != nil {
             match icon_grid_stuff.as_ref().unwrap().icon_map.get(&icon_tapped) {
                 Some(&TappedIcon::App(app_idx)) => {
+                    // In pin mode, tapping a game adds a Home Screen web-clip
+                    // icon for it instead of launching it.
+                    #[cfg(target_os = "ios")]
+                    if pin_mode {
+                        pin_mode = false;
+                        if let Ok(list) = apps.as_ref() {
+                            pin_app_to_home(&list[app_idx]);
+                        }
+                        () = msg![env; icon_tapped setAlpha:(1.0 as CGFloat)];
+                        let title = ns_string::get_static_str(env, "Pin to Home");
+                        () = msg![env; pin_button setTitle:title forState:UIControlStateNormal];
+                        continue;
+                    }
                     // Provide visual feedback that the app has been picked
                     // (it may take a while for the splash screen to appear etc)
                     () = msg![env; icon_tapped setAlpha:(0.5 as CGFloat)];
@@ -610,6 +840,20 @@ fn app_picker_inner(
                 }
                 None => (), // Tapped on a black space
             }
+            continue;
+        }
+        #[cfg(target_os = "ios")]
+        if std::mem::take(&mut host_obj.pin_mode_toggle) {
+            pin_mode = !pin_mode;
+            let title = ns_string::get_static_str(
+                env,
+                if pin_mode {
+                    "Pin mode: tap a game"
+                } else {
+                    "Pin to Home"
+                },
+            );
+            () = msg![env; pin_button setTitle:title forState:UIControlStateNormal];
             continue;
         }
         if std::mem::take(&mut host_obj.copyright_show) {
