@@ -552,7 +552,7 @@ impl Environment {
                         let count = section.size / 4;
                         for i in 0..count {
                             let func = env.mem.read(base + i);
-                            log_dbg!(
+                            log!(
                                 "Calling static initializer at {:?} from {:?}",
                                 func,
                                 (base + i)
@@ -959,6 +959,45 @@ impl Environment {
         }
     }
 
+    /// Best-effort symbolication of a guest code address for crash dumps: finds
+    /// which loaded image contains it and the nearest preceding exported symbol.
+    /// Returns a string like " <PaperToss+0x132c70  _someFunc+0x10>" or
+    /// " <libstdc++.6.0.9.dylib+0x...>", or "" if it can't be resolved.
+    ///
+    /// Must never panic (it runs while already handling a crash): no unwraps,
+    /// no indexing.
+    fn symbolicate_addr(&self, addr: u32) -> String {
+        let a = addr & !1; // ignore the Thumb bit
+        for bin in &self.bins {
+            // Approximate the image's address range from its sections.
+            let mut lo = u32::MAX;
+            for s in &bin.sections {
+                if s.addr != 0 && s.addr < lo {
+                    lo = s.addr;
+                }
+            }
+            let hi = bin.last_segment_end;
+            if lo == u32::MAX || a < lo || a >= hi {
+                continue;
+            }
+            // Nearest exported symbol at or before `a`.
+            let mut best: Option<(&str, u32)> = None;
+            for (name, &sym_addr) in &bin.exported_symbols {
+                let sym = sym_addr & !1;
+                if sym <= a && best.map_or(true, |(_, b)| sym > b) {
+                    best = Some((name.as_str(), sym));
+                }
+            }
+            return match best {
+                Some((name, sym)) => {
+                    format!(" <{}+{:#x}  {}+{:#x}>", bin.name, a - lo, name, a - sym)
+                }
+                None => format!(" <{}+{:#x}>", bin.name, a - lo),
+            };
+        }
+        String::new()
+    }
+
     fn stack_trace_for_thread(&self, tid: usize) {
         if tid >= self.threads.len() {
             echo_no_panic!(
@@ -985,7 +1024,11 @@ impl Environment {
         let pc_nothumb = regs[cpu::Cpu::PC];
         let thumb = (cpsr & cpu::Cpu::CPSR_THUMB) == cpu::Cpu::CPSR_THUMB;
         let pc = GuestFunction::from_addr_and_thumb_flag(pc_nothumb, thumb);
-        echo_no_panic!(" 0. {:#x} (PC)", pc.addr_with_thumb_bit());
+        echo_no_panic!(
+            " 0. {:#x} (PC){}",
+            pc.addr_with_thumb_bit(),
+            self.symbolicate_addr(pc_nothumb)
+        );
         let mut lr = regs[cpu::Cpu::LR];
         let return_to_host_routine_addr = self.dyld.return_to_host_routine().addr_with_thumb_bit();
         let thread_exit_routine_addr = self.dyld.thread_exit_routine().addr_with_thumb_bit();
@@ -995,7 +1038,7 @@ impl Environment {
             echo_no_panic!(" 1. [thread exit] (LR)");
             return;
         } else {
-            echo_no_panic!(" 1. {:#x} (LR)", lr);
+            echo_no_panic!(" 1. {:#x} (LR){}", lr, self.symbolicate_addr(lr));
         }
         let mut i = 2;
         let mut fp: mem::ConstPtr<u8> = mem::Ptr::from_bits(regs[abi::FRAME_POINTER]);
@@ -1012,7 +1055,7 @@ impl Environment {
                 echo_no_panic!("{:2}. [thread exit]", i);
                 return;
             } else {
-                echo_no_panic!("{:2}. {:#x}", i, lr);
+                echo_no_panic!("{:2}. {:#x}{}", i, lr, self.symbolicate_addr(lr));
             }
             i += 1;
         }
