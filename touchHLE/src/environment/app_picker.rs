@@ -147,6 +147,7 @@ struct AppPickerDelegateHostObject {
     analog_stick_tilt_controls: Option<bool>,
     network: Option<bool>,
     fullscreen: Option<bool>,
+    force_portrait: Option<bool>,
 }
 impl HostObject for AppPickerDelegateHostObject {}
 
@@ -234,6 +235,10 @@ const CLASSES: ClassExports = objc_classes! {
 - (())fullscreen:(id)switch { // UISwitch*
     let switch_state: bool = msg![env; switch isOn];
     env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).fullscreen = Some(switch_state);
+}
+- (())forcePortrait:(id)switch { // UISwitch*
+    let switch_state: bool = msg![env; switch isOn];
+    env.objc.borrow_mut::<AppPickerDelegateHostObject>(this).force_portrait = Some(switch_state);
 }
 
 - (())openFileManager {
@@ -515,6 +520,7 @@ fn app_picker_inner(
     let quick_options_stuff = setup_quick_options(env, delegate, main_view, app_frame);
     let mut quick_options_scale_hack: Option<NonZeroU32> = None;
     let mut quick_options_fullscreen: Option<()> = None;
+    let mut quick_options_force_portrait = false;
     let mut quick_options_orientation: Option<DeviceOrientation> = None;
     let mut quick_options_analog_stick_tilt_controls = true;
     let mut quick_options_network = false;
@@ -675,9 +681,10 @@ fn app_picker_inner(
                 quick_options_scale_hack,
             );
         } else if std::mem::take(&mut host_obj.orientation_default) {
-            // On iOS "Default" = force portrait (the game naturally goes
-            // landscape, so this button lets the user override to portrait).
-            quick_options_orientation = Some(DeviceOrientation::Portrait);
+            // "Default" = no orientation override; use the app's own default.
+            // (To force portrait regardless of the game's request, use the
+            // dedicated "Force portrait" switch below instead.)
+            quick_options_orientation = None;
             update_orientation_buttons(
                 env,
                 &quick_options_stuff.orientation_buttons,
@@ -713,6 +720,8 @@ fn app_picker_inner(
                 false => None,
                 true => Some(()),
             };
+        } else if let Some(enabled) = std::mem::take(&mut host_obj.force_portrait) {
+            quick_options_force_portrait = enabled;
         }
     };
 
@@ -733,6 +742,9 @@ fn app_picker_inner(
     }
     if let Some(()) = quick_options_fullscreen {
         option_args.push("--fullscreen".to_string());
+    }
+    if quick_options_force_portrait {
+        option_args.push("--force-portrait".to_string());
     }
     if !quick_options_analog_stick_tilt_controls {
         option_args.push("--disable-analog-stick-tilt-controls".to_string());
@@ -1341,6 +1353,8 @@ fn setup_quick_options(
         RowKind::Switch("network:", false),
         RowKind::Label("Use analog sticks for tilt controls"),
         RowKind::Switch("analogStickTiltControls:", true),
+        RowKind::Label("Force portrait (keep landscape games upright)"),
+        RowKind::Switch("forcePortrait:", false),
         // ---- (divider for stuff skipped below)
         RowKind::Label("Fullscreen (override)"),
         RowKind::Switch("fullscreen:", false),
