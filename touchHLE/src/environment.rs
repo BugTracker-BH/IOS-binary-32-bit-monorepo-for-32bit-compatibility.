@@ -452,28 +452,6 @@ impl Environment {
             }
         }
 
-        // libstdc++ imports the C++ exception unwinder (`_Unwind_SjLj_*`) and
-        // its personality routine from libgcc_s, but apps link libstdc++
-        // without naming libgcc_s directly (it's a transitive dependency), so
-        // it isn't in the executable's dependency list and wouldn't otherwise
-        // be loaded. Without it, C++ exception propagation has no unwinder and
-        // any `throw` becomes fatal (std::terminate -> abort). Load it
-        // explicitly so real SjLj exception handling works.
-        if dylibs.iter().any(|d| d.name.contains("libstdc++"))
-            && !dylibs.iter().any(|d| d.name.contains("libgcc_s"))
-        {
-            let libgcc_path = fs::GuestPath::new("/usr/lib/libgcc_s.1.dylib");
-            if fs.is_file(libgcc_path) {
-                let libgcc =
-                    mach_o::MachO::load_from_file(libgcc_path, &fs, &mut mem, 0x30000000)
-                        .map_err(|e| format!("Could not load bundled libgcc_s: {e}"))?;
-                log!(
-                    "Loaded libgcc_s.1.dylib (transitive dependency of libstdc++) for C++ exception support"
-                );
-                dylibs.push(libgcc);
-            }
-        }
-
         let entry_point_addr = executable
             .entry_point_pc
             .ok_or_else(|| {

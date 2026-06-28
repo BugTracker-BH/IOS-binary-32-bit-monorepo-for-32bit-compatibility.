@@ -45,6 +45,7 @@ pub mod sys;
 pub mod sysctl;
 pub mod time;
 pub mod unistd;
+pub mod unwind_sjlj;
 pub mod wchar;
 pub mod zlib;
 
@@ -101,6 +102,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         sched::FUNCTIONS,
         semaphore::FUNCTIONS,
         setjmp::FUNCTIONS,
+        unwind_sjlj::FUNCTIONS,
         signal::FUNCTIONS,
         stdio::FUNCTIONS,
         stdio::printf::FUNCTIONS,
@@ -133,6 +135,7 @@ pub struct State {
     pub semaphore: semaphore::State,
     pub socket: sys::socket::State,
     stdlib: stdlib::State,
+    unwind_sjlj: unwind_sjlj::State,
     string: string::State,
     pub stdio: stdio::State,
     time: time::State,
