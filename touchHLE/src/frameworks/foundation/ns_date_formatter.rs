@@ -32,9 +32,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (())setDateFormat:(id)format { // NSString *
-    let date_format: id = msg![env; format copy];
-    env.objc.borrow_mut::<NSDateFormatterHostObject>(this).date_format = Some(date_format);
+    let host_object = env.objc.borrow_mut::<NSDateFormatterHostObject>(this);
+    host_object.format = Some(format);
 }
+
+- (())setLocale:(id)_locale { // NSLocale* — ignored; formatting uses system locale
+}
+
 
 - (id)stringFromDate:(id)date {
     let &NSDateFormatterHostObject {
