@@ -337,11 +337,19 @@ pub const CLASSES: ClassExports = objc_classes! {
         // copied back to system RAM, and then will have to be copied to VRAM
         // again during composition. find_fullscreen_eagl_layer() exists to
         // avoid this.
-        log!(
-            "[ios-present] There is no fullscreen layer, presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path).",
-            renderbuffer,
-            drawable,
-        );
+        {
+            // This fires every presented frame; log it only once so it doesn't
+            // flood the runtime log (the slow path itself is unchanged).
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WARNED: AtomicBool = AtomicBool::new(false);
+            if !WARNED.swap(true, Ordering::Relaxed) {
+                log!(
+                    "[ios-present] No fullscreen layer; presenting renderbuffer {:?} to layer {:?} by copying to RAM (slow path). [logged once; happens every frame]",
+                    renderbuffer,
+                    drawable,
+                );
+            }
+        }
         let pixels_vec = get_pixels_vec_for_presenting(env, drawable);
         // re-borrow
         let (pixels_vec, width, height) = {
