@@ -75,6 +75,10 @@ pub const CLASSES: ClassExports = objc_classes! {
    }
 }
 
++ (id)bundleWithPath:(id)_path { // NSString* — for now, always return mainBundle
+    msg_class![env; NSBundle mainBundle]
+}
+
 + (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
     let preferredLocalizations = CFBundleCopyPreferredLocalizationsFromArray(env, localizations_array);
     autorelease(env, preferredLocalizations)
