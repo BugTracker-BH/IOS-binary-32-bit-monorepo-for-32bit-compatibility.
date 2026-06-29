@@ -801,6 +801,26 @@ fn glVertexPointer(
 // Drawing
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
     with_ctx_and_mem(env, |gles, _mem| unsafe {
+        {
+            // Diagnostic (first few draws): dump the live modelview/projection
+            // matrices and viewport, to see the actual transform applied to the
+            // (set-once) vertex quad. An X-axis collapse shows up here.
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            let n = N.fetch_add(1, Ordering::Relaxed);
+            if n < 8 {
+                let mut mv = [0.0f32; 16];
+                let mut proj = [0.0f32; 16];
+                let mut vp = [0i32; 4];
+                gles.GetFloatv(gles11::MODELVIEW_MATRIX, mv.as_mut_ptr());
+                gles.GetFloatv(gles11::PROJECTION_MATRIX, proj.as_mut_ptr());
+                gles.GetIntegerv(gles11::VIEWPORT, vp.as_mut_ptr());
+                log!(
+                    "[draw-diag] glDrawArrays #{} mode=0x{:x} first={} count={} viewport={:?} modelview={:?} projection={:?}",
+                    n, mode, first, count, vp, mv, proj
+                );
+            }
+        }
         let fog_state_backup = clamp_fog_state_values(gles);
         gles.DrawArrays(mode, first, count);
         restore_fog_state_values(gles, fog_state_backup);
