@@ -312,6 +312,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; info_dict objectForKey:key]
 }
 
+- (id)localizedInfoDictionary {
+    // Returns the localized Info.plist dict; fall back to regular infoDictionary
+    msg![env; this infoDictionary]
+}
+
 - (id)localizations {
     let localizations = CFBundleCopyBundleLocalizations(env, this);
     autorelease(env, localizations)
