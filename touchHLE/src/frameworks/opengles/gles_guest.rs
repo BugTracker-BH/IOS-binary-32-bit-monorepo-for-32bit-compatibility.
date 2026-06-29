@@ -1259,6 +1259,23 @@ fn glTexImage2D(
     pixels: ConstVoidPtr,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
+        {
+            // Diagnostic: log each texture's dimensions + power-of-two-ness, to
+            // compare the working background vs the garbled photo thumbnails.
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static N: AtomicU32 = AtomicU32::new(0);
+            let n = N.fetch_add(1, Ordering::Relaxed);
+            if n < 48 {
+                let mut bound = 0i32;
+                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
+                let pot_w = width > 0 && (width & (width - 1)) == 0;
+                let pot_h = height > 0 && (height & (height - 1)) == 0;
+                log!(
+                    "[teximg-diag] tex={} level={} {}x{} fmt=0x{:x} type=0x{:x} pot={}x{}",
+                    bound, level, width, height, format, type_, pot_w, pot_h
+                );
+            }
+        }
         let pixels = if pixels.is_null() {
             std::ptr::null()
         } else {
