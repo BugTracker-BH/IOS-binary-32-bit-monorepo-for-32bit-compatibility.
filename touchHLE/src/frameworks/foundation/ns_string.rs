@@ -449,6 +449,26 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; this initWithBytes:c_string length:len encoding:encoding]
 }
 
+- (id)initWithBytesNoCopy:(MutPtr<u8>)bytes
+                   length:(NSUInteger)len
+                 encoding:(NSStringEncoding)encoding
+             freeWhenDone:(bool)free_when_done {
+    // Like initWithBytes:length:encoding:, but the caller hands us ownership of
+    // the buffer. We decode (copying into our host object) and then free the
+    // original buffer if asked, matching Foundation's contract.
+    let bytes_const: ConstPtr<u8> = Ptr::from_bits(bytes.to_bits());
+    let slice = env.mem.bytes_at(bytes_const, len);
+    let host_object = StringHostObject::decode(Cow::Borrowed(slice), encoding);
+
+    *env.objc.borrow_mut(this) = host_object;
+
+    if free_when_done {
+        env.mem.free(bytes.cast());
+    }
+
+    this
+}
+
 - (id)dataUsingEncoding:(NSStringEncoding)encoding {
     msg![env; this dataUsingEncoding:encoding allowLossyConversion:false]
 }
