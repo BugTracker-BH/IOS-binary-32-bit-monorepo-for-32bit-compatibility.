@@ -278,7 +278,51 @@ fn _Unwind_SjLj_ForcedUnwind(
     _URC_END_OF_STACK
 }
 
+/// Host `__cxa_throw`: the C++ throw entry point. libstdc++ provides its own,
+/// but at runtime its internal call to `_Unwind_SjLj_RaiseException` does not
+/// reach our host implementation (the app registers frames on our chain via our
+/// `_Unwind_SjLj_Register`, but the throw never invokes our raise). We shadow
+/// `__cxa_throw` so the app's throw routes *directly* into our unwinder, which
+/// walks the chain the app already built.
+///
+/// `__cxa_exception` layout (disassembled from this libstdc++'s `__cxa_throw`):
+/// `exceptionType @ obj-0x40`, `exceptionDestructor @ obj-0x3c`, and the
+/// `_Unwind_Exception` (unwindHeader) at `obj-0x14`
+/// (`exception_class[8], cleanup, private_1, private_2`).
+fn __cxa_throw(
+    env: &mut Environment,
+    thrown_object: MutVoidPtr,
+    tinfo: MutVoidPtr,
+    dtor: GuestFunction,
+) {
+    let obj = thrown_object.to_bits();
+    log!(
+        "[eh-sjlj] __cxa_throw(obj={:#x} tinfo={:#x}) routing to host unwinder",
+        obj,
+        tinfo.to_bits()
+    );
+    w32(env, obj - 0x40, tinfo.to_bits()); // exceptionType
+    w32(env, obj - 0x3c, dtor.addr_with_thumb_bit()); // exceptionDestructor
+    w32(env, obj - 0x14, 0x4355_4e47); // exception_class lo = "GNUC"
+    w32(env, obj - 0x10, 0x002b_2b43); // exception_class hi = "C++\0"
+    w32(env, obj - 0x0c, 0); // exception_cleanup
+    w32(env, obj - 0x08, 0); // private_1
+    w32(env, obj - 0x04, 0); // private_2
+    let code = _Unwind_SjLj_RaiseException(env, Ptr::from_bits(obj - 0x14));
+    // On success the raise installed the landing-pad context (CPU regs set) and
+    // returned 0; we just return so the SVC path resumes in the handler.
+    // Anything else means no handler was found -> terminate.
+    if code != 0 {
+        log!(
+            "[eh-sjlj] __cxa_throw: no handler (RaiseException returned {}) -> terminating",
+            code
+        );
+        panic!("Uncaught guest C++ exception (host __cxa_throw)");
+    }
+}
+
 pub const FUNCTIONS: FunctionExports = &[
+    export_c_func!(__cxa_throw(_, _, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_GetContext()),
