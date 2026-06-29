@@ -501,6 +501,22 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
     let width_u32: u32 = width.try_into().unwrap();
     let height_u32: u32 = height.try_into().unwrap();
 
+    {
+        // Diagnostic (logged once): the actual GL storage size of the guest's
+        // renderbuffer. If this isn't the expected screen size (e.g. 320x480),
+        // the compositor maps mismatched pixels onto the layer quad, producing
+        // the vertical-smear/banding. Slow path only — JellyCar uses the fast
+        // path, so this can't affect it.
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static WARNED: AtomicBool = AtomicBool::new(false);
+        if !WARNED.swap(true, Ordering::Relaxed) {
+            log!(
+                "[readback-diag] guest renderbuffer {} storage size = {}x{} (logged once)",
+                renderbuffer, width_u32, height_u32
+            );
+        }
+    }
+
     // To avoid confusing the guest app, we need to be able to undo any
     // state changes we make.
     let old_framebuffer: GLuint = get_int(gles, gles11::FRAMEBUFFER_BINDING_OES) as _;
