@@ -1276,6 +1276,33 @@ fn glTexImage2D(
                 );
             }
         }
+        // ASCII preview of 128x128 RGBA photo textures, to SEE how the photo is
+        // laid out in the texture (normal vs stored-wrapped across the edges).
+        if width == 128 && height == 128 && format == 0x1908 && !pixels.is_null() {
+            use std::sync::atomic::{AtomicU32, Ordering};
+            static M: AtomicU32 = AtomicU32::new(0);
+            let m = M.fetch_add(1, Ordering::Relaxed);
+            if m < 3 {
+                let mut bound = 0i32;
+                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
+                let base = pixels.to_bits();
+                let ramp = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
+                log!("[tex-ascii] tex={} (128x128, each char = 8px):", bound);
+                for gy in 0..16u32 {
+                    let mut line = String::with_capacity(16);
+                    for gx in 0..16u32 {
+                        let (x, y) = (gx * 8, gy * 8);
+                        let off = (y * 128 + x) * 4;
+                        let r: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off));
+                        let g: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off + 1));
+                        let b: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off + 2));
+                        let lum = (r as u32 + g as u32 + b as u32) / 3;
+                        line.push(ramp[(lum as usize * (ramp.len() - 1)) / 255]);
+                    }
+                    log!("[tex-ascii] |{}|", line);
+                }
+            }
+        }
         let pixels = if pixels.is_null() {
             std::ptr::null()
         } else {
