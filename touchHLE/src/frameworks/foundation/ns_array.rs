@@ -456,6 +456,30 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.objc.borrow::<ArrayHostObject>(this).array[index as usize]
 }
 
+- (())enumerateObjectsUsingBlock:(id)block { // void (^)(id obj, NSUInteger idx, BOOL *stop)
+    if block.is_null() {
+        return;
+    }
+    // Block ABI: the invoke function pointer lives at offset 12 of the block
+    // literal, and the block is passed as the (hidden) first argument.
+    let invoke_ptr: u32 = env.mem.read(Ptr::<u32, false>::from_bits(block.to_bits() + 12));
+    let invoke = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
+    // Guest `BOOL *stop`, initialised to NO; the block may set it to abort.
+    let stop: MutPtr<bool> = env.mem.alloc(1).cast();
+    env.mem.write(stop, false);
+    let count: NSUInteger = msg![env; this count];
+    let mut i: NSUInteger = 0;
+    while i < count {
+        let obj: id = msg![env; this objectAtIndex:i];
+        let _: () = invoke.call_from_host(env, (block, obj, i, stop));
+        if env.mem.read(stop) {
+            break;
+        }
+        i += 1;
+    }
+    env.mem.free(stop.cast());
+}
+
 - (id)description {
     build_description(env, this)
 }
