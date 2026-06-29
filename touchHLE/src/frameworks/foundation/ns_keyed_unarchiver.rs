@@ -97,12 +97,38 @@ pub const CLASSES: ClassExports = objc_classes! {
     assert!(host_obj.current_key.is_none());
     assert!(host_obj.plist.is_empty());
 
-    let plist = Value::from_reader(Cursor::new(slice)).unwrap();
-    let plist = plist.into_dictionary().unwrap();
-    assert!(plist["$version"].as_unsigned_integer() == Some(100000));
-    assert!(plist["$archiver"].as_string() == Some("NSKeyedArchiver"));
-
-    let key_count = plist["$objects"].as_array().unwrap().len();
+    // The data may be empty/truncated/not-an-archive (e.g. read from a file that
+    // doesn't exist, which yields empty NSData). Real NSKeyedUnarchiver returns
+    // nil / fails for that rather than crashing, so degrade gracefully instead of
+    // unwrapping (which panicked with "UnexpectedEof").
+    let plist = match Value::from_reader(Cursor::new(slice)) {
+        Ok(plist) => plist,
+        Err(e) => {
+            log!(
+                "Warning: [NSKeyedUnarchiver initForReadingWithData:] could not parse {} bytes ({:?}); returning nil",
+                length, e
+            );
+            return nil;
+        }
+    };
+    let Some(plist) = plist.into_dictionary() else {
+        log!("Warning: [NSKeyedUnarchiver initForReadingWithData:] archive root is not a dictionary; returning nil");
+        return nil;
+    };
+    if plist.get("$version").and_then(|v| v.as_unsigned_integer()) != Some(100000)
+        || plist.get("$archiver").and_then(|v| v.as_string()) != Some("NSKeyedArchiver")
+    {
+        log!("Warning: [NSKeyedUnarchiver initForReadingWithData:] not an NSKeyedArchiver archive; returning nil");
+        return nil;
+    }
+    let Some(key_count) = plist
+        .get("$objects")
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+    else {
+        log!("Warning: [NSKeyedUnarchiver initForReadingWithData:] missing $objects; returning nil");
+        return nil;
+    };
 
     host_obj.already_unarchived = vec![None; key_count];
     host_obj.plist = plist;
