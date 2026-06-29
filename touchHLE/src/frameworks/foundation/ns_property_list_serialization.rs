@@ -41,7 +41,11 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)dataFromPropertyList:(id)plist
                     format:(NSPropertyListFormat)format
                 errorDescription:(MutPtr<id>)error_string { // NSString **
-    assert!(error_string.is_null()); // TODO
+    // The app may pass a non-null errorDescription out-parameter; on success
+    // there is no error, so clear it to nil rather than asserting.
+    if !error_string.is_null() {
+        env.mem.write(error_string, nil);
+    }
 
     let value = serialize_plist(env, plist);
     log_dbg!("dataFromPropertyList value {:?}", value);
