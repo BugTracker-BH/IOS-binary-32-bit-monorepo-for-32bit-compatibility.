@@ -516,22 +516,49 @@ fn sqlite3_exec(
     real.call_from_host(env, (db, sql, callback, arg, errmsg))
 }
 
-/// Shim for `std::string::reserve(size_t)`. JellyCar 3's `SoundManager::playMusic`
-/// reads a `std::string` from an object that was never initialized (FMOD failed →
-/// the music system is in a broken state), producing a garbage length value that
-/// causes `_S_create` to throw `length_error`. We intercept `reserve`: if the
-/// requested capacity is absurdly large (> 256MB — no real string needs that), we
-/// silently clamp it to 0 (the string stays empty) instead of letting the real
-/// `reserve` throw. This keeps the app alive through the failed-audio path.
+/// Shim for `std::string::append(const std::string&)`. JellyCar 3's
+/// `SoundManager::playMusic` calls `operator+` which calls `append` with a
+/// corrupted `std::string&` (garbage length from uninitialized FMOD state). The
+/// real `append` → `reserve` → `_S_create` throws `length_error`. We intercept
+/// `append`: if the argument string's internal length field is absurd (> 256MB),
+/// we skip the append entirely (the result string stays unchanged), preventing
+/// the uncaught exception that kills the app.
+#[allow(non_snake_case)]
+fn _ZNSs6appendERKSs(env: &mut Environment, this: MutVoidPtr, other: MutVoidPtr) {
+    // libstdc++ COW std::string layout: the _Rep is at (data_ptr - 12).
+    // At offset 0 of the visible object is the data pointer.
+    // _Rep::_M_length is at data_ptr - 12, _M_capacity at data_ptr - 8.
+    // We read the data pointer, then read length from _Rep.
+    let data_ptr: u32 = env.mem.read(Ptr::<u32, false>::from_bits(other.to_bits()));
+    let corrupted = if data_ptr < 0x1000 {
+        true // NULL or near-NULL data pointer
+    } else {
+        let length: u32 = env.mem.read(Ptr::<u32, false>::from_bits(data_ptr.wrapping_sub(12)));
+        length > 256 * 1024 * 1024
+    };
+    if corrupted {
+        log!(
+            "Note: std::string::append(corrupted string @ {:?}) skipped — \
+             likely uninitialized FMOD/sound state (touchHLE append shim)",
+            other
+        );
+        return; // Don't forward — leave `this` unchanged.
+    }
+    let real = resolve_guest_export(env, "__ZNSs6appendERKSs");
+    let _: () = real.call_from_host(env, (this, other));
+}
+
+/// Shim for `std::string::reserve(size_t)`. Catches absurd allocation requests
+/// from corrupted string state (backup for the append shim above).
 #[allow(non_snake_case)]
 fn _ZNSs7reserveEm(env: &mut Environment, this: MutVoidPtr, n: u32) {
     if n > 256 * 1024 * 1024 {
         log!(
-            "Note: std::string::reserve({:#x}) clamped to 0 — likely a corrupted \
+            "Note: std::string::reserve({:#x}) clamped — likely corrupted \
              string from uninitialized FMOD/sound state (touchHLE reserve shim)",
             n
         );
-        return; // Don't forward — just leave the string as-is (empty/short).
+        return;
     }
     let real = resolve_guest_export(env, "__ZNSs7reserveEm");
     let _: () = real.call_from_host(env, (this, n));
@@ -548,6 +575,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_exec(_, _, _, _, _)),
     // Catches absurd std::string::reserve from corrupted FMOD/sound state.
     export_c_func!(_ZNSs7reserveEm(_, _)),
+    // Catches corrupted std::string::append (the actual crash path in JC3's playMusic).
+    export_c_func!(_ZNSs6appendERKSs(_, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_GetContext()),
