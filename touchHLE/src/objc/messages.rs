@@ -241,9 +241,11 @@ fn objc_msgSend_inner(
     );
     let message_type_info = env.objc.message_type_info.take();
 
-    if receiver == nil {
+    if receiver == nil || receiver.to_bits() < env.mem.null_segment_size() {
         // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjectiveC/Chapters/ocObjectsClasses.html#//apple_ref/doc/uid/TP30001163-CH11-SW7
-        log_dbg!("[nil {}]", selector.as_str(&env.mem));
+        // Also covers garbage pointers in the null page (e.g. 0x1) that would
+        // crash on isa read — treat the same as nil (return 0).
+        log_dbg!("[nil/invalid-receiver({:?}) {}]", receiver, selector.as_str(&env.mem));
         env.cpu.regs_mut()[0..2].fill(0);
         return;
     }
