@@ -2503,6 +2503,11 @@ impl Window {
             self.device_orientation,
             DeviceOrientation::LandscapeLeft | DeviceOrientation::LandscapeRight
         );
+        // PortraitUpsideDown: the shared compositor produces content that the
+        // desktop present path un-rotates via its rotation matrix; this iOS CPU
+        // path only vertically flips, which leaves the result upside-down on
+        // device. So for upside-down we rotate the would-be-portrait output 180°.
+        let upside_down = matches!(self.device_orientation, DeviceOrientation::PortraitUpsideDown);
         unsafe {
             let buf = libc::malloc(n) as *mut u8;
             if buf.is_null() {
@@ -2522,6 +2527,19 @@ impl Window {
                     }
                 }
                 (ow, oh)
+            } else if upside_down {
+                // Rotate the portrait result 180° so an upside-down app renders
+                // right-side up on a normally-held device. Empirically (vs the
+                // pure-vflip portrait output, which came out inverted on iOS):
+                //   out[y][x] = pixels[y][w-1-x]
+                for y in 0..h {
+                    for x in 0..w {
+                        let src = (y * w + (w - 1 - x)) * 4;
+                        let dst = (y * w + x) * 4;
+                        std::ptr::copy_nonoverlapping(pixels.as_ptr().add(src), buf.add(dst), 4);
+                    }
+                }
+                (w, h)
             } else {
                 let row = w * 4;
                 for y in 0..h {

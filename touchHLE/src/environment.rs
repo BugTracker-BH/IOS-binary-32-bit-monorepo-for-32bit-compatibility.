@@ -283,20 +283,7 @@ impl Environment {
                     // (UI)DeviceOrientation values (content has to rotate in
                     // the opposite direction to how the device rotates).
                     "UIInterfaceOrientationPortraitUpsideDown" => {
-                        // An app that supports BOTH Portrait and PortraitUpsideDown
-                        // (e.g. Paper Toss World Tour) runs fine right-side up;
-                        // honouring upside-down just renders it inverted on a
-                        // normally-held device. Prefer normal Portrait when the app
-                        // supports it. (Apps that only support upside-down still get
-                        // PortraitUpsideDown.)
-                        if orientations
-                            .iter()
-                            .any(|&o| o == "UIInterfaceOrientationPortrait")
-                        {
-                            window::DeviceOrientation::Portrait
-                        } else {
-                            window::DeviceOrientation::PortraitUpsideDown
-                        }
+                        window::DeviceOrientation::PortraitUpsideDown
                     }
                     "UIInterfaceOrientationLandscapeLeft" => {
                         window::DeviceOrientation::LandscapeRight
