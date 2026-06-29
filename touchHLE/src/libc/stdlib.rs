@@ -257,6 +257,51 @@ fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
     }
 }
 
+/// `int _NSGetExecutablePath(char *buf, uint32_t *bufsize)` (`<mach-o/dyld.h>`).
+///
+/// Writes the absolute path of the main executable into `buf` and returns 0. If
+/// `buf` is too small (or NULL), it sets `*bufsize` to the required size
+/// (including the NUL terminator) and returns -1, matching the real API.
+///
+/// This MUST be implemented for real rather than left to the generic no-op
+/// stub (which returns 0 without writing anything): crash reporters such as
+/// HockeySDK and various startup code call this and then build a
+/// `std::string` from the buffer. With the no-op stub the buffer is never
+/// written, so the app constructs `std::string(NULL)` and aborts with
+/// `basic_string::_S_construct NULL not valid`.
+fn _NSGetExecutablePath(env: &mut Environment, buf: MutPtr<u8>, bufsize: MutPtr<u32>) -> i32 {
+    let path = env.bundle.executable_path().as_str().to_owned();
+    let path_bytes = path.as_bytes();
+    // Required size includes the NUL terminator.
+    let needed: u32 = u32::try_from(path_bytes.len()).unwrap() + 1;
+
+    let avail: u32 = if bufsize.is_null() {
+        0
+    } else {
+        env.mem.read(bufsize)
+    };
+    // Always report the required size, as the real implementation does.
+    if !bufsize.is_null() {
+        env.mem.write(bufsize, needed);
+    }
+
+    if buf.is_null() || avail < needed {
+        log_dbg!(
+            "_NSGetExecutablePath({:?}, need={:#x}, avail={:#x}) => -1 (buffer too small)",
+            buf,
+            needed,
+            avail
+        );
+        return -1;
+    }
+
+    let dst = env.mem.bytes_at_mut(buf, needed);
+    dst[..path_bytes.len()].copy_from_slice(path_bytes);
+    dst[path_bytes.len()] = b'\0';
+    log!("_NSGetExecutablePath() => {:?}", path);
+    0
+}
+
 fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let Some(&value) = env.env_vars.get(name_cstr) else {
@@ -793,6 +838,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(random()),
     export_c_func!(arc4random()),
     export_c_func!(div(_, _)),
+    export_c_func!(_NSGetExecutablePath(_, _)),
     export_c_func!(getenv(_)),
     export_c_func!(setenv(_, _, _)),
     export_c_func!(unsetenv(_)),

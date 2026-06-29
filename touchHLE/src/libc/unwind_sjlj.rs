@@ -318,19 +318,47 @@ fn __cxa_throw(
     w32(env, obj - 0x04, 0); // private_2
     let code = _Unwind_SjLj_RaiseException(env, Ptr::from_bits(obj - 0x14));
     if code != 0 {
-        // No handler found. Instead of terminating (which kills the app),
-        // log and silently swallow the exception. This handles the common case
-        // of std::string(NULL) from missing file paths, faked data returning
-        // null pointers, etc. The app continues with the function returning
-        // normally (to whatever called throw), which usually means the
-        // calling code's error path runs or it just proceeds.
+        // No handler was found anywhere on the SjLj chain.
+        //
+        // We CANNOT "swallow" this by simply returning: `__cxa_throw` is
+        // `[[noreturn]]`, so its caller (e.g. libstdc++'s `__throw_logic_error`)
+        // is compiled assuming control never comes back and will fall straight
+        // through into `std::terminate`/`abort`. Returning here therefore does
+        // not keep the app alive — it just hides the cause. So treat it as the
+        // fatal error it is, but report it usefully first.
+        //
+        // Identify what was thrown via the `std::type_info` (Itanium C++ ABI:
+        // vtable @ +0, `const char* __type_name` @ +4 — the mangled name).
+        let type_name = if tinfo.to_bits() != 0 {
+            let name_ptr = r32(env, tinfo.to_bits() + 4);
+            if name_ptr != 0 {
+                env.mem
+                    .cstr_at_utf8(Ptr::from_bits(name_ptr))
+                    .map(|s| s.to_owned())
+                    .unwrap_or_else(|_| "<unreadable>".to_string())
+            } else {
+                "<null name>".to_string()
+            }
+        } else {
+            "<no type_info (rethrow)>".to_string()
+        };
         log!(
-            "[eh-sjlj] __cxa_throw: no handler found (code={}) — swallowing exception to keep app alive",
+            "[eh-sjlj] __cxa_throw: UNCAUGHT C++ exception (type {:?}, raise code={}). \
+             No handler on the SjLj chain. Guest stack at the throw site:",
+            type_name,
             code
         );
-        // Don't panic/abort — just return. The throw site's code continues
-        // after the throw statement, which in most cases means the function
-        // returns to its caller with whatever was in registers (typically 0/nil).
+        env.stack_trace_current();
+        // A common cause is a touchHLE stub returning NULL/nil that the guest
+        // then feeds into `std::string` (-> std::logic_error). The type name
+        // and stack above pinpoint which one; fix that stub rather than the
+        // throw. Terminate cleanly so touchHLE shows its crash pop-up.
+        panic!(
+            "Uncaught guest C++ exception of type {:?} (no SjLj handler found). \
+             Often a touchHLE stub returned NULL/nil that the app passed to a \
+             std::string — see the guest stack above.",
+            type_name
+        );
     }
 }
 
