@@ -760,7 +760,7 @@ fn glTexCoordPointer(
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        if n < 20 {
+        if n < 64 {
             log!(
                 "[diag-ptr] glTexCoordPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
                 size, type_, stride, pointer.to_bits()
@@ -839,7 +839,7 @@ fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsize
             use std::sync::atomic::{AtomicU32, Ordering};
             static N: AtomicU32 = AtomicU32::new(0);
             let n = N.fetch_add(1, Ordering::Relaxed);
-            if n < 8 {
+            if n < 64 {
                 let mut mv = [0.0f32; 16];
                 let mut proj = [0.0f32; 16];
                 let mut vp = [0i32; 4];
