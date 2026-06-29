@@ -7,7 +7,7 @@
 
 use super::{ns_string, unichar, NSRange, NSUInteger};
 use crate::objc::{
-    autorelease, id, msg, msg_class, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
+    autorelease, id, msg, msg_class, nil, objc_classes, retain, ClassExports, HostObject, NSZonePtr,
 };
 use std::collections::HashSet;
 
