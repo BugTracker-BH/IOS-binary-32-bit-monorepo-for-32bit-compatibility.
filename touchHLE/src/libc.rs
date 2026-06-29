@@ -13,6 +13,7 @@ mod generic_char;
 
 pub mod arpa;
 pub mod clocale;
+pub mod crt;
 pub mod crypto;
 pub mod ctype;
 pub mod cxxabi;
@@ -44,6 +45,7 @@ pub mod sys;
 pub mod sysctl;
 pub mod time;
 pub mod unistd;
+pub mod unwind_sjlj;
 pub mod wchar;
 pub mod zlib;
 
@@ -51,12 +53,18 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
     path: "/usr/lib/libSystem.B.dylib",
     aliases: &["/usr/lib/libSystem.dylib"],
     class_exports: &[],
-    constant_exports: &[ctype::CONSTANTS, stdio::CONSTANTS, mach::init::CONSTANTS],
+    constant_exports: &[
+        crt::CONSTANTS,
+        ctype::CONSTANTS,
+        stdio::CONSTANTS,
+        mach::init::CONSTANTS,
+    ],
     function_exports: &[
         arpa::inet::FUNCTIONS,
         clocale::FUNCTIONS,
         ctype::FUNCTIONS,
         cxxabi::FUNCTIONS,
+        crt::FUNCTIONS,
         crypto::FUNCTIONS,
         dirent::FUNCTIONS,
         dlfcn::FUNCTIONS,
@@ -94,6 +102,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
         sched::FUNCTIONS,
         semaphore::FUNCTIONS,
         setjmp::FUNCTIONS,
+        unwind_sjlj::FUNCTIONS,
         signal::FUNCTIONS,
         stdio::FUNCTIONS,
         stdio::printf::FUNCTIONS,
@@ -119,6 +128,7 @@ pub const DYLIB: crate::dyld::HostDylib = crate::dyld::HostDylib {
 #[derive(Default)]
 pub struct State {
     dirent: dirent::State,
+    crypto: crypto::State,
     keymgr: keymgr::State,
     math: math::State,
     posix_io: posix_io::State,
@@ -126,6 +136,7 @@ pub struct State {
     pub semaphore: semaphore::State,
     pub socket: sys::socket::State,
     stdlib: stdlib::State,
+    unwind_sjlj: unwind_sjlj::State,
     string: string::State,
     pub stdio: stdio::State,
     time: time::State,

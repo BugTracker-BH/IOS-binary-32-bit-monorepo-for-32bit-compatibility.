@@ -65,7 +65,13 @@ pub(super) struct ThreadInitializer {
 }
 
 fn maybe_initialize_class(env: &mut Environment, receiver: id) {
-    let class_host_object = env.objc.get_host_object(receiver).unwrap();
+    // The receiver may be an untracked pointer — e.g. a bogus/garbage value left
+    // behind by an unimplemented stub, or a fake/unimplemented class. If we have
+    // no host object for it, there is nothing to send +initialize to, so bail
+    // out leniently rather than panicking (mirrors the fake-class case below).
+    let Some(class_host_object) = env.objc.get_host_object(receiver) else {
+        return;
+    };
     let Some(&super::ClassHostObject {
         superclass,
         is_metaclass,
@@ -241,15 +247,29 @@ fn objc_msgSend_inner(
     );
     let message_type_info = env.objc.message_type_info.take();
 
-    if receiver == nil {
+    if receiver == nil || receiver.to_bits() < env.mem.null_segment_size() {
         // https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjectiveC/Chapters/ocObjectsClasses.html#//apple_ref/doc/uid/TP30001163-CH11-SW7
-        log_dbg!("[nil {}]", selector.as_str(&env.mem));
+        // Also covers garbage pointers in the null page (e.g. 0x1) that would
+        // crash on isa read — treat the same as nil (return 0).
+        log_dbg!("[nil/invalid-receiver({:?}) {}]", receiver, selector.as_str(&env.mem));
         env.cpu.regs_mut()[0..2].fill(0);
         return;
     }
 
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
-    assert!(orig_class != nil);
+    if orig_class == nil {
+        // The receiver's isa read back as nil — i.e. it isn't a real object
+        // (e.g. a garbage pointer left behind by an unimplemented stub). Treat
+        // the message as unhandled and return nil rather than asserting,
+        // mirroring the nil/invalid-receiver and untracked-class guards.
+        log_dbg!(
+            "[invalid-isa receiver({:?}) {}] returning nil",
+            receiver,
+            selector.as_str(&env.mem)
+        );
+        env.cpu.regs_mut()[0..2].fill(0);
+        return;
+    }
     if !skip_initialize {
         maybe_initialize_class(env, receiver);
     }
@@ -284,7 +304,20 @@ fn objc_msgSend_inner(
             );
         }
 
-        let host_object = env.objc.get_host_object(class).unwrap();
+        let Some(host_object) = env.objc.get_host_object(class) else {
+            // The class in the superclass chain isn't a tracked class — i.e. the
+            // receiver isn't a real object (e.g. a garbage pointer left by an
+            // unimplemented stub). Treat the message as unhandled and return nil
+            // rather than panicking, mirroring the nil/invalid-receiver path above.
+            log_dbg!(
+                "[untracked-class receiver({:?}) class({:?}) {}] returning nil",
+                receiver,
+                class,
+                selector.as_str(&env.mem)
+            );
+            env.cpu.regs_mut()[0..2].fill(0);
+            return;
+        };
 
         if let Some(&super::ClassHostObject {
             superclass,

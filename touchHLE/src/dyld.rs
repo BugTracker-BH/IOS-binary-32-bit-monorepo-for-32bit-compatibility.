@@ -64,6 +64,17 @@ pub struct HostDylib {
 
 pub type HostFunction = &'static dyn CallFromGuest;
 
+/// No-op fallback for an unimplemented guest-called function: ignore all
+/// arguments and return 0. Bound to any otherwise-unresolved lazy symbol by
+/// [Dyld::get_svc_handler] so the app degrades gracefully instead of crashing.
+fn unimplemented_function_stub(_env: &mut Environment) -> i32 {
+    0
+}
+
+/// [HostFunction] wrapper around [unimplemented_function_stub].
+const UNIMPLEMENTED_FUNCTION_STUB: HostFunction =
+    &(unimplemented_function_stub as fn(&mut Environment) -> i32);
+
 /// Type for lists of functions exported by host implementations of dynamic
 /// libraries (usually frameworks).
 ///
@@ -593,12 +604,23 @@ impl Dyld {
                 continue;
             }
 
+            // Unresolved external data symbol — typically an `NSString * const`
+            // we don't provide (a UIKit/Foundation key or notification name).
+            // Leaving the slot NULL makes the guest crash the first time it
+            // dereferences the constant (`ldr rN,[slot]` → NULL → `ldr,[rN]`).
+            // Instead, bind a placeholder empty NSString so the reference
+            // resolves to a valid (if empty) object and the app degrades
+            // gracefully. Logged so missing-but-needed constants stay
+            // discoverable (and can be given real values later).
             log!(
-                "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\"",
+                "Warning: unhandled non-lazy symbol {:?} at {:?} in \"{}\" — binding empty-NSString placeholder",
                 symbol,
                 ptr_ptr,
                 bin.name
             );
+            static UNRESOLVED_DATA_PLACEHOLDER: HostConstant = HostConstant::NSString("");
+            self.constants_to_link_later
+                .push((ptr_ptr, &UNRESOLVED_DATA_PLACEHOLDER));
         }
 
         // FIXME: check for internal relocations?
@@ -808,7 +830,54 @@ impl Dyld {
             }
         }
 
-        panic!("Call to unimplemented function {symbol}");
+        // Some unimplemented functions are NORETURN: they must terminate, not
+        // return 0. A no-op `abort`/terminate lets the failure path run on into
+        // undefined behavior (which surfaced as a generic MemoryError). The
+        // common ones (abort, __assert_rtn) are implemented for real in libc
+        // with stack traces; this denylist catches any other fatal terminator
+        // we don't provide, so it fails loudly instead of silently continuing.
+        const NORETURN_FUNCS: &[&str] = &[
+            "___cxa_pure_virtual",
+            "__ZSt9terminatev",
+            "_abort_report_np",
+            "___cxa_call_unexpected",
+        ];
+        if NORETURN_FUNCS.contains(&symbol) {
+            panic!(
+                "Guest called noreturn function {symbol}, which touchHLE doesn't implement \
+                 (likely a failed assertion or unhandled C++ exception). Terminating rather \
+                 than continuing into undefined behavior."
+            );
+        }
+
+        // Unimplemented function: rather than crashing, bind it to a no-op
+        // stub that ignores its arguments and returns 0, so the app degrades
+        // gracefully instead of dying ("Call to unimplemented function ..."). The
+        // ObjC ARC family — the one set that must NOT no-op (e.g. objc_retain
+        // must return its argument) — is implemented for real (src/objc/arc.rs),
+        // so it never reaches here. Logged so missing functions stay
+        // discoverable. Caveats: if the app dereferences a (now-zero) return
+        // value it will null-deref slightly later (caught by the symbolicating
+        // crash dump), and a no-op'd async/dispatch can stall a feature —
+        // acceptable for best-effort compatibility. Mirrors the host-function
+        // linking path above, substituting the no-op stub.
+        log!("Warning: call to unimplemented function {symbol} — returning 0 (best-effort no-op stub)");
+        let f = UNIMPLEMENTED_FUNCTION_STUB;
+        let idx: u32 = self.linked_host_functions.len().try_into().unwrap();
+        let mut svc = idx + Self::SVC_LINKED_FUNCTIONS_BASE;
+        if info.entry_size == 4 {
+            assert!(svc < Self::SVC_LAZY_LINK_RET_FLAG);
+            svc |= Self::SVC_LAZY_LINK_RET_FLAG;
+        }
+        self.linked_host_functions
+            .push(("_touchHLE_unimplemented_function", f));
+        let stub_function_ptr: MutPtr<u32> = Ptr::from_bits(svc_pc);
+        mem.write(stub_function_ptr, encode_a32_svc(svc));
+        if info.entry_size != 4 {
+            assert!(mem.read(stub_function_ptr + 1) == encode_a32_ret());
+        }
+        cpu.invalidate_cache_range(stub_function_ptr.to_bits(), 4);
+        Some(f)
     }
 
     /// Creates a guest function that will call a host function with the name

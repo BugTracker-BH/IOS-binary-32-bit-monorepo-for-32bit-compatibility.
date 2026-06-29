@@ -76,6 +76,18 @@ pub const CLASSES: ClassExports = objc_classes! {
     this
 }
 
+// touchHLE doesn't model the view-controller containment hierarchy, so there is
+// no navigation/parent controller to return. nil is a valid answer (a controller
+// not embedded in a navigation stack has a nil navigationController), and it lets
+// callers like `[self.navigationController pushViewController:...]` safely no-op.
+- (id)navigationController {
+    nil
+}
+
+- (id)parentViewController {
+    nil
+}
+
 - (())dealloc {
     let &UIViewControllerHostObject { view, nib_name, bundle } = env.objc.borrow(this);
 

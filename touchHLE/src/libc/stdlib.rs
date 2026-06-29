@@ -257,6 +257,51 @@ fn div(_env: &mut Environment, numer: i32, denom: i32) -> div_t {
     }
 }
 
+/// `int _NSGetExecutablePath(char *buf, uint32_t *bufsize)` (`<mach-o/dyld.h>`).
+///
+/// Writes the absolute path of the main executable into `buf` and returns 0. If
+/// `buf` is too small (or NULL), it sets `*bufsize` to the required size
+/// (including the NUL terminator) and returns -1, matching the real API.
+///
+/// This MUST be implemented for real rather than left to the generic no-op
+/// stub (which returns 0 without writing anything): crash reporters such as
+/// HockeySDK and various startup code call this and then build a
+/// `std::string` from the buffer. With the no-op stub the buffer is never
+/// written, so the app constructs `std::string(NULL)` and aborts with
+/// `basic_string::_S_construct NULL not valid`.
+fn _NSGetExecutablePath(env: &mut Environment, buf: MutPtr<u8>, bufsize: MutPtr<u32>) -> i32 {
+    let path = env.bundle.executable_path().as_str().to_owned();
+    let path_bytes = path.as_bytes();
+    // Required size includes the NUL terminator.
+    let needed: u32 = u32::try_from(path_bytes.len()).unwrap() + 1;
+
+    let avail: u32 = if bufsize.is_null() {
+        0
+    } else {
+        env.mem.read(bufsize)
+    };
+    // Always report the required size, as the real implementation does.
+    if !bufsize.is_null() {
+        env.mem.write(bufsize, needed);
+    }
+
+    if buf.is_null() || avail < needed {
+        log_dbg!(
+            "_NSGetExecutablePath({:?}, need={:#x}, avail={:#x}) => -1 (buffer too small)",
+            buf,
+            needed,
+            avail
+        );
+        return -1;
+    }
+
+    let dst = env.mem.bytes_at_mut(buf, needed);
+    dst[..path_bytes.len()].copy_from_slice(path_bytes);
+    dst[path_bytes.len()] = b'\0';
+    log!("_NSGetExecutablePath() => {:?}", path);
+    0
+}
+
 fn getenv(env: &mut Environment, name: ConstPtr<u8>) -> MutPtr<u8> {
     let name_cstr = env.mem.cstr_at(name);
     let Some(&value) = env.env_vars.get(name_cstr) else {
@@ -319,6 +364,48 @@ fn exit(env: &mut Environment, exit_code: i32) {
 
     echo!("App called exit(), exiting.");
     std::process::exit(exit_code);
+}
+
+/// `void abort(void)` — noreturn. The app calls this at an unrecoverable point
+/// (failed assertion, uncaught C++/Boost exception via `std::terminate`, etc.).
+/// It must NOT return: a no-op `abort` lets the failure path run on into garbage
+/// (which previously manifested as a generic MemoryError). Dump the guest stack
+/// so we can see what triggered it, then terminate.
+fn abort(env: &mut Environment) {
+    echo!("App called abort()! Guest stack trace at the abort call:");
+    env.stack_trace_current();
+    // Panic (rather than process::exit) so touchHLE shows its usual crash
+    // pop-up explaining what happened, instead of silently closing.
+    panic!(
+        "Guest called abort() — likely an uncaught C++/Boost exception or a failed \
+         assertion (see guest stack trace in the log)"
+    );
+}
+
+/// `void __assert_rtn(const char *func, const char *file, int line, const char *expr)`
+/// — the failed-assertion handler. Noreturn; report which assertion failed and
+/// the guest stack, then terminate.
+#[allow(non_snake_case)]
+fn __assert_rtn(
+    env: &mut Environment,
+    func: ConstPtr<u8>,
+    file: ConstPtr<u8>,
+    line: i32,
+    expr: ConstPtr<u8>,
+) {
+    let func_s = env.mem.cstr_at_utf8(func).unwrap_or("?").to_owned();
+    let file_s = env.mem.cstr_at_utf8(file).unwrap_or("?").to_owned();
+    let expr_s = env.mem.cstr_at_utf8(expr).unwrap_or("?").to_owned();
+    echo!(
+        "Assertion failed: ({}), function {}, file {}, line {}.",
+        expr_s,
+        func_s,
+        file_s,
+        line
+    );
+    env.stack_trace_current();
+    // Panic so touchHLE shows its crash pop-up with the failed assertion.
+    panic!("Guest assertion failed: ({expr_s}) in {func_s} at {file_s}:{line}");
 }
 
 fn bsearch(
@@ -469,6 +556,159 @@ fn strtoull(
     }
 }
 
+fn strtoll(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i64 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    let parse_res = str_to_int_inner_generic(
+        env,
+        |env, s, idx| Ok(env.mem.read(s + idx)),
+        |_, _, _| (),
+        str.cast_mut(),
+        0,
+        base.try_into().unwrap(),
+        u32::MAX,
+        |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
+        |num| num.wrapping_neg(),
+    );
+    match parse_res {
+        Ok((res, len)) => {
+            if !endptr.is_null() {
+                env.mem.write(endptr, (str + len).cast_mut());
+            }
+            res
+        }
+        Err(_) => {
+            if !endptr.is_null() {
+                env.mem.write(endptr, str.cast_mut());
+            }
+            0
+        }
+    }
+}
+
+// libgcc integer division/modulo helpers. Older armv7 has no hardware integer
+// divide, so the compiler emits calls to these (and the app calls `__umodsi3`
+// directly). They normally come from libgcc, which we don't link — and no-op'ing
+// them returns 0, which silently corrupts every division/modulo. So implement
+// them for real. Division by zero is UB in C; we return 0 to avoid a host panic.
+fn __udivsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        0
+    } else {
+        a / b
+    }
+}
+fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        0
+    } else {
+        a % b
+    }
+}
+fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_div(b)
+    }
+}
+fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_rem(b)
+    }
+}
+
+// 64-bit (`long long`) versions of the libgcc div/mod helpers. Same rationale as
+// the 32-bit ones. Signed variants take u64 args and reinterpret, to avoid
+// depending on an `i64: GuestArg` impl.
+fn __udivdi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        0
+    } else {
+        a / b
+    }
+}
+fn __umoddi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        0
+    } else {
+        a % b
+    }
+}
+fn __divdi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
+    let (a, b) = (a as i64, b as i64);
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_div(b)
+    }
+}
+fn __moddi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
+    let (a, b) = (a as i64, b as i64);
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_rem(b)
+    }
+}
+
+// libgcc soft-float conversion helpers. `__fixunsdfdi` converts a `double` to
+// `unsigned long long`. On ARM soft-float ABI the double is passed in r0:r1
+// (as a u64 bitpattern), and the result is returned in r0:r1 (as u64). Since
+// touchHLE's GuestArg for f64 reads from r0:r1 as bits and GuestRet for u64
+// writes to r0:r1, using f64→u64 directly with the Rust `as` cast works.
+fn __fixunsdfdi(_env: &mut Environment, val: f64) -> u64 {
+    if val.is_nan() || val <= 0.0 {
+        0
+    } else if val >= u64::MAX as f64 {
+        u64::MAX
+    } else {
+        val as u64
+    }
+}
+
+fn __fixdfdi(_env: &mut Environment, val: f64) -> i64 {
+    if val.is_nan() {
+        0
+    } else {
+        val as i64
+    }
+}
+
+fn __floatdidf(_env: &mut Environment, val: i64) -> f64 {
+    val as f64
+}
+
+fn __floatundidf(_env: &mut Environment, val: u64) -> f64 {
+    val as f64
+}
+
+/// `void dispatch_once(dispatch_once_t *predicate, dispatch_block_t block)`.
+///
+/// GCD's run-once primitive. On a real device this is thread-safe (compare-and-
+/// swap + barrier); here we can rely on touchHLE's coroutine model (guest code
+/// doesn't truly preempt) and just check-and-set. The block ABI is: `block` is
+/// a pointer to a struct whose invoke function pointer is at offset 12 (armv7),
+/// called with the block pointer as the first argument.
+fn dispatch_once(env: &mut Environment, predicate: MutPtr<u32>, block: MutVoidPtr) {
+    let pred_val: u32 = env.mem.read(predicate);
+    if pred_val != 0 {
+        return; // already executed
+    }
+    // Mark as done BEFORE invoking (prevents re-entrancy from triggering again).
+    env.mem.write(predicate, 1u32);
+    // Invoke the block: block->invoke is at byte offset 12.
+    let invoke_ptr: u32 = env.mem.read(Ptr::<u32, false>::from_bits(block.to_bits() + 12));
+    if invoke_ptr != 0 {
+        let f = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
+        log_dbg!("dispatch_once: invoking block {:?} via invoke={:#x}", block, invoke_ptr);
+        let _: () = f.call_from_host(env, (block,));
+    }
+}
+
 fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -598,15 +838,32 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(random()),
     export_c_func!(arc4random()),
     export_c_func!(div(_, _)),
+    export_c_func!(_NSGetExecutablePath(_, _)),
     export_c_func!(getenv(_)),
     export_c_func!(setenv(_, _, _)),
     export_c_func!(unsetenv(_)),
     export_c_func!(exit(_)),
+    export_c_func!(abort()),
+    export_c_func!(__assert_rtn(_, _, _, _)),
     export_c_func!(bsearch(_, _, _, _, _)),
     export_c_func!(strtof(_, _)),
     export_c_func!(strtoul(_, _, _)),
     export_c_func!(wcstoul(_, _, _)),
     export_c_func!(strtoull(_, _, _)),
+    export_c_func!(strtoll(_, _, _)),
+    export_c_func!(__udivsi3(_, _)),
+    export_c_func!(__umodsi3(_, _)),
+    export_c_func!(__divsi3(_, _)),
+    export_c_func!(__modsi3(_, _)),
+    export_c_func!(__udivdi3(_, _)),
+    export_c_func!(__umoddi3(_, _)),
+    export_c_func!(__divdi3(_, _)),
+    export_c_func!(__moddi3(_, _)),
+    export_c_func!(__fixunsdfdi(_)),
+    export_c_func!(__fixdfdi(_)),
+    export_c_func!(__floatdidf(_)),
+    export_c_func!(__floatundidf(_)),
+    export_c_func!(dispatch_once(_, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),

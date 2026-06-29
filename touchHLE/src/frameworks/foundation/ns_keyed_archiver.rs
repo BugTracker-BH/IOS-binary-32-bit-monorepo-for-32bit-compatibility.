@@ -76,6 +76,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; data writeToFile:file atomically:true]
 }
 
+- (id)initForWritingWithMutableData:(id)data { // NSMutableData*
+    // Store the data reference; finishEncoding will serialize into it.
+    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = data;
+    this
+}
+
 - (())encodeObject:(id)object // NSCoding *
             forKey:(id)key { // NSString *
     let key = normalize_key(env, key);
@@ -155,12 +161,6 @@ pub fn set_value_to_encode_for_current_key(env: &mut Environment, archiver: id, 
 }
 
 pub fn get_value_to_encode_for_current_key(env: &mut Environment, archiver: id) -> &mut Dictionary {
-    assert_eq!(
-        env.objc
-            .borrow::<NSKeyedArchiverHostObject>(archiver)
-            .encoded_data,
-        nil
-    );
     let host_object = env.objc.borrow_mut::<NSKeyedArchiverHostObject>(archiver);
     match host_object.current_key {
         Some(uid) => host_object

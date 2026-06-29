@@ -547,7 +547,13 @@ impl Fs {
         const FAKE_UUID: &str = "00000000-0000-0000-0000-000000000000";
 
         let home_directory = APPLICATIONS.join(FAKE_UUID);
-        let working_directory = GuestPathBuf::from("/".to_string());
+        // On iPhone OS 2.x/3.x, an app's current working directory at launch is
+        // its `.app` bundle directory. Apps of that era rely on this to open
+        // bundled resources via relative paths (e.g. `fopen("./obf.dat")` or
+        // `"foo.png"`). touchHLE previously hardcoded "/", so those opens
+        // resolved to `/obf.dat` etc., failed with ENOENT, and the app would
+        // typically crash (e.g. feeding the missing path into a std::string).
+        let working_directory = home_directory.join(&bundle_dir_name);
 
         let bundle_guest_path = home_directory.join(&bundle_dir_name);
 

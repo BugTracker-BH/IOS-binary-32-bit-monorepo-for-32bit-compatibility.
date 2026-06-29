@@ -118,6 +118,7 @@ jobs:
             printf '%s\n' '<key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationPortrait</string></array>'
             printf '%s\n' '<key>UILaunchScreen</key><dict/>'
             printf '%s\n' '<key>UIApplicationSupportsIndirectInputEvents</key><true/>'
+            printf '%s\n' '<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>org.touchhle.ios.run</string><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLSchemes</key><array><string>touchhle</string></array></dict></array>'
             printf '%s\n' '</dict></plist>'
           } > "$APP/Info.plist"
           echo "--- Info.plist ---"; cat "$APP/Info.plist"; plutil -lint "$APP/Info.plist" || true

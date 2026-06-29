@@ -214,6 +214,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: ignoring registerForRemoteNotificationTypes:{}", types);
 }
 
+// UIApplicationState: Active = 0, Inactive = 1, Background = 2. touchHLE always
+// runs the app foregrounded/active, so report Active.
+- (NSInteger)applicationState {
+    0 // UIApplicationStateActive
+}
+
 - (NSInteger)applicationIconBadgeNumber {
     0 // default value
 }
@@ -470,6 +476,15 @@ const UIApplicationWillTerminateNotification: &str = "UIApplicationWillTerminate
 /// Other app notifications
 const UIApplicationLaunchOptionsRemoteNotificationKey: &str =
     "UIApplicationLaunchOptionsRemoteNotificationKey";
+const UIApplicationLaunchOptionsLocalNotificationKey: &str =
+    "UIApplicationLaunchOptionsLocalNotificationKey";
+const UIApplicationLaunchOptionsURLKey: &str = "UIApplicationLaunchOptionsURLKey";
+const UIApplicationLaunchOptionsSourceApplicationKey: &str =
+    "UIApplicationLaunchOptionsSourceApplicationKey";
+const UIApplicationLaunchOptionsAnnotationKey: &str =
+    "UIApplicationLaunchOptionsAnnotationKey";
+const UIApplicationLaunchOptionsLocationKey: &str =
+    "UIApplicationLaunchOptionsLocationKey";
 const UIApplicationDidReceiveMemoryWarningNotification: &str =
     "UIApplicationDidReceiveMemoryWarningNotification";
 
@@ -507,6 +522,26 @@ pub const CONSTANTS: ConstantExports = &[
     (
         "_UIApplicationLaunchOptionsRemoteNotificationKey",
         HostConstant::NSString(UIApplicationLaunchOptionsRemoteNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocalNotificationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocalNotificationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsURLKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsURLKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsSourceApplicationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsSourceApplicationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsAnnotationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsAnnotationKey),
+    ),
+    (
+        "_UIApplicationLaunchOptionsLocationKey",
+        HostConstant::NSString(UIApplicationLaunchOptionsLocationKey),
     ),
 ];
 

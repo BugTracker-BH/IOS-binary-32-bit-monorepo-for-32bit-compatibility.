@@ -614,13 +614,26 @@ impl ObjC {
                     panic!("Missing implementation for class {name}!");
                 }
             } else {
-                // We don't have a real implementation for this class, use a
-                // placeholder.
-                class_host_object = Box::new(UnimplementedClass {
+                // We don't have a real implementation for this class. Rather
+                // than an UnimplementedClass placeholder that PANICS on the
+                // first message (so any app referencing an unimplemented
+                // framework class hard-crashes — NSOperationQueue, NSJSON-
+                // Serialization, UITableViewController, …), fake it: a
+                // FakeClass absorbs every selector as a no-op returning `self`,
+                // so the whole call chain degrades gracefully instead of
+                // crashing. This lets games limp past optional framework
+                // features. Each faked class is logged so missing-but-needed
+                // implementations remain discoverable, and `+load` correctly
+                // skips fake classes (see Environment static-init).
+                log!(
+                    "Note: faking unimplemented class {:?} (absorbs messages as no-ops) for compatibility",
+                    name
+                );
+                class_host_object = Box::new(FakeClass {
                     name: name.to_string(),
                     is_metaclass: false,
                 });
-                metaclass_host_object = Box::new(UnimplementedClass {
+                metaclass_host_object = Box::new(FakeClass {
                     name: name.to_string(),
                     is_metaclass: true,
                 });

@@ -10,10 +10,21 @@ use super::NSTimeInterval;
 use super::{ns_run_loop, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
-    HostObject, SEL,
+    HostObject, NSZonePtr, SEL,
 };
 use crate::Environment;
 use std::time::{Duration, Instant};
+
+/// Safe Duration from f64 that clamps negatives/NaN to zero.
+fn safe_duration(secs: f64) -> Duration {
+    if secs.is_nan() || secs <= 0.0 {
+        Duration::ZERO
+    } else if secs > 1e15 {
+        Duration::from_secs(1_000_000) // cap at ~11 days to avoid overflow
+    } else {
+        Duration::from_secs_f64(secs)
+    }
+}
 
 struct NSTimerHostObject {
     ns_interval: NSTimeInterval,
@@ -42,13 +53,31 @@ pub const CLASSES: ClassExports = objc_classes! {
 // NSTimer doesn't seem to be an abstract class?
 @implementation NSTimer: NSObject
 
++ (id)allocWithZone:(NSZonePtr)_zone {
+    // Blank timer; the real fields are filled in by an `init…` method. (The
+    // `+timerWithTimeInterval:` class methods build the host object directly and
+    // don't go through here.)
+    let host_object = Box::new(NSTimerHostObject {
+        ns_interval: 0.0,
+        rust_interval: Duration::ZERO,
+        target: nil,
+        selector: SEL::null(),
+        user_info: nil,
+        repeats: false,
+        due_by: None,
+        is_running_callback: false,
+        run_loop: nil,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
 + (id)timerWithTimeInterval:(NSTimeInterval)ns_interval
                      target:(id)target
                    selector:(SEL)selector
                    userInfo:(id)user_info
                     repeats:(bool)repeats {
     let ns_interval = ns_interval.max(0.0001);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    let rust_interval = safe_duration(ns_interval);
 
     retain(env, target);
     retain(env, user_info);
@@ -95,6 +124,46 @@ pub const CLASSES: ClassExports = objc_classes! {
     let _: () = msg![env; run_loop addTimer:timer forMode:mode];
 
     timer
+}
+
+// Designated initializer, used via `[[NSTimer alloc] initWithFireDate:...]`.
+- (id)initWithFireDate:(id)date // NSDate*
+              interval:(NSTimeInterval)ns_interval
+                target:(id)target
+              selector:(SEL)selector
+              userInfo:(id)user_info
+               repeats:(bool)repeats {
+    let ns_interval = ns_interval.max(0.0001);
+    let rust_interval = safe_duration(ns_interval);
+
+    retain(env, target);
+    retain(env, user_info);
+
+    // First fire is at `date`; if that's now/past, fire as soon as possible.
+    let secs_until_fire: NSTimeInterval = if date == nil {
+        0.0
+    } else {
+        msg![env; date timeIntervalSinceNow]
+    };
+    let due_by = Instant::now().checked_add(safe_duration(secs_until_fire));
+
+    let host = env.objc.borrow_mut::<NSTimerHostObject>(this);
+    host.ns_interval = ns_interval;
+    host.rust_interval = rust_interval;
+    host.target = target;
+    host.selector = selector;
+    host.user_info = user_info;
+    host.repeats = repeats;
+    host.due_by = due_by;
+
+    log_dbg!(
+        "[[NSTimer alloc] initWithFireDate:...] {:?}, interval {}s, repeats {}",
+        this,
+        ns_interval,
+        repeats,
+    );
+
+    this
 }
 
 - (())dealloc {
@@ -163,7 +232,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 pub fn set_time_interval(env: &mut Environment, timer: id, interval: NSTimeInterval) {
     let host_object = env.objc.borrow_mut::<NSTimerHostObject>(timer);
     host_object.ns_interval = interval;
-    host_object.rust_interval = Duration::from_secs_f64(interval);
+    host_object.rust_interval = safe_duration(interval);
 }
 
 /// For use by `NSRunLoop`

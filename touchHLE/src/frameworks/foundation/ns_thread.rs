@@ -105,7 +105,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (())sleepForTimeInterval:(NSTimeInterval)ti {
     log_dbg!("[NSThread sleepForTimeInterval:{:?}]", ti);
-    env.sleep(Duration::from_secs_f64(ti));
+    env.sleep(Duration::from_secs_f64(ti.max(0.0)));
 }
 + (())sleepUntilDate:(id)date { // NSDate *
     let ti: NSTimeInterval = msg![env; date timeIntervalSinceNow];
@@ -120,6 +120,14 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 + (bool)isMainThread {
+    env.current_thread == 0
+}
+
+- (bool)isMainThread {
+    // The overwhelmingly common idiom is `[[NSThread currentThread] isMainThread]`,
+    // where the receiver is the executing thread, so reporting whether we're on
+    // thread 0 (the main thread) is correct for that usage and mirrors the class
+    // method above.
     env.current_thread == 0
 }
 

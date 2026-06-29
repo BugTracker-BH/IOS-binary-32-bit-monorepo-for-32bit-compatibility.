@@ -211,6 +211,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)numberWithUnsignedLong:(u32)value {
+    // unsigned long == u32 on 32-bit iOS (ILP32)
+    msg_class![env; NSNumber numberWithUnsignedInt:value]
+}
+
 + (id)numberWithInt:(i32)value {
     // TODO: for greater efficiency we could return a static-lifetime value
 

@@ -177,9 +177,11 @@ fn sysctl(
                         .get(&SysCtlNamePath::Length4(name0, name1, name2, name3))
                         .cloned()
                     else {
-                        unimplemented!(
-                            "Unknown sysctl parameter ({name0}, {name1}, {name2}, {name3})!"
-                        )
+                        log!(
+                            "Warning: unknown sysctl parameter ({}, {}, {}, {}) — returning empty",
+                            name0, name1, name2, name3
+                        );
+                        return ("", SysInfoType::Int32(0));
                     };
                     val
                 },
@@ -218,7 +220,8 @@ fn sysctlbyname(
         |env| {
             let name_str = env.mem.cstr_at_utf8(name).unwrap();
             let Some((name_str, val)) = STRING_MAP.get_key_value(name_str) else {
-                unimplemented!("Unknown sysctlbyname parameter {name_str}!")
+                log!("Warning: unknown sysctlbyname parameter {:?} — returning empty", name_str);
+                return ("", SysInfoType::Int32(0));
             };
             (name_str, val.clone())
         },

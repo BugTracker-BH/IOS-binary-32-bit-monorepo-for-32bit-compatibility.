@@ -270,7 +270,22 @@ fn blend_premultiplied(
             (fg.3 * bg.1).max(bg.3 * fg.1),
             (fg.3 * bg.2).max(bg.3 * fg.2),
         ),
-        _ => unimplemented!("blend mode {}", blend_mode),
+        _ => {
+            // Unimplemented blend mode (e.g. the non-separable HSL modes like
+            // kCGBlendModeColor = 14). Rather than crash, approximate with the
+            // Normal blend so the app keeps running. Logged once. This only
+            // affects modes that previously panicked; the implemented modes
+            // above (used by working apps) are unchanged.
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WARNED: AtomicBool = AtomicBool::new(false);
+            if !WARNED.swap(true, Ordering::Relaxed) {
+                log!(
+                    "Warning: unimplemented CG blend mode {}; approximating with Normal blend (logged once)",
+                    blend_mode
+                );
+            }
+            (bg.3 * fg.0, bg.3 * fg.1, bg.3 * fg.2)
+        }
     };
     // Compose
     let neg_bg_a = 1.0 - bg.3;

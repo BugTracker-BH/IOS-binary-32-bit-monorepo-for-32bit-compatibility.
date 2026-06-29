@@ -270,8 +270,8 @@ impl Environment {
         // window rotation after-the-fact is somewhat glitchy.
         // This also ensures the splash screen is correctly oriented.
         if options.initial_orientation == window::DeviceOrientation::Portrait {
-            if let Some(&non_portrait_orientation) = bundle
-                .supported_interface_orientations()
+            let orientations = bundle.supported_interface_orientations();
+            if let Some(&non_portrait_orientation) = orientations
                 .iter()
                 .find(|&&o| o != "UIInterfaceOrientationPortrait")
             {
@@ -933,7 +933,7 @@ impl Environment {
         }
     }
 
-    fn stack_trace_current(&self) {
+    pub(crate) fn stack_trace_current(&self) {
         if self.current_thread == 0 {
             echo_no_panic!("Attempting to produce stack trace for main thread:");
         } else {

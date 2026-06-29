@@ -60,6 +60,11 @@ impl GuestRet for SEL {
 }
 
 impl SEL {
+    /// A null selector. Useful for default-initializing host objects whose real
+    /// selector is filled in later by an `init…` method.
+    pub fn null() -> SEL {
+        SEL(Ptr::null())
+    }
     pub fn as_str(self, mem: &Mem) -> &str {
         // selectors are probably always UTF-8 but this hasn't been verified
         mem.cstr_at_utf8(self.0).unwrap()

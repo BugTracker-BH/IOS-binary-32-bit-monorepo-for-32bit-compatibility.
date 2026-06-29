@@ -428,6 +428,36 @@ fn CGContextShowGlyphsAtPositions(
     }
 }
 
+fn CGContextGetTextPosition(env: &mut Environment, context: CGContextRef) -> CGPoint {
+    // touchHLE does not yet advance a text pen position as glyphs are drawn, so
+    // approximate the current text position with the text matrix translation
+    // (where the app last positioned text). Returning a real value rather than
+    // the previous no-op (which left registers at 0) prevents the app from
+    // deriving a garbage pointer/length from a zeroed result.
+    let pos = env
+        .objc
+        .borrow::<CGContextHostObject>(context)
+        .text_transform
+        .map(|t| CGPoint { x: t.tx, y: t.ty })
+        .unwrap_or(CGPoint { x: 0.0, y: 0.0 });
+    // Copy out of the packed CGPoint before formatting (can't take a reference
+    // to a field of a packed struct).
+    let (x, y) = (pos.x, pos.y);
+    log_dbg!(
+        "[diag] CGContextGetTextPosition({:?}) -> ({}, {})",
+        context,
+        x,
+        y
+    );
+    pos
+}
+
+fn CGContextSetLineWidth(_env: &mut Environment, context: CGContextRef, width: CGFloat) {
+    // TODO: track line width for path stroking. No-op for now (previously an
+    // unimplemented stub); harmless for the text/fill drawing these apps use.
+    log_dbg!("TODO: CGContextSetLineWidth({:?}, {})", context, width);
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextRetain(_)),
     export_c_func!(CGContextRelease(_)),
@@ -459,4 +489,6 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CGContextSetTextMatrix(_, _)),
     export_c_func!(CGContextShowGlyphsAtPoint(_, _, _, _, _)),
     export_c_func!(CGContextShowGlyphsAtPositions(_, _, _, _)),
+    export_c_func!(CGContextGetTextPosition(_)),
+    export_c_func!(CGContextSetLineWidth(_, _)),
 ];

@@ -61,8 +61,13 @@ pub fn CFAbsoluteTimeGetGregorianDate(
     tz: CFTimeZoneRef,
 ) -> CFGregorianDate {
     assert!(tz.is_null());
-    let time64 = apple_epoch()
-        .add(Duration::from_secs_f64(at))
+    let epoch = apple_epoch();
+    let system_time = if at.is_nan() || at < 0.0 {
+        epoch // fallback: treat negative/NaN as the epoch itself
+    } else {
+        epoch.add(Duration::from_secs_f64(at))
+    };
+    let time64 = system_time
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();

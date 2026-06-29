@@ -41,13 +41,25 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)dataFromPropertyList:(id)plist
                     format:(NSPropertyListFormat)format
                 errorDescription:(MutPtr<id>)error_string { // NSString **
-    assert_eq!(format, NSPropertyListBinaryFormat_v1_0); // TODO
-    assert!(error_string.is_null()); // TODO
+    // The app may pass a non-null errorDescription out-parameter; on success
+    // there is no error, so clear it to nil rather than asserting.
+    if !error_string.is_null() {
+        env.mem.write(error_string, nil);
+    }
 
     let value = serialize_plist(env, plist);
     log_dbg!("dataFromPropertyList value {:?}", value);
     let mut buf = Vec::new();
-    value.to_writer_binary(&mut buf).unwrap();
+    // touchHLE historically only emitted binary plists; some apps (e.g. when
+    // writing a savedata.plist) request the XML format. Support both.
+    match format {
+        NSPropertyListBinaryFormat_v1_0 => value.to_writer_binary(&mut buf).unwrap(),
+        NSPropertyListXMLFormat_v1_0 => value.to_writer_xml(&mut buf).unwrap(),
+        _ => unimplemented!(
+            "NSPropertyListSerialization: unsupported output format {}",
+            format
+        ),
+    }
     let len: u32 = buf.len().try_into().unwrap();
     log_dbg!("dataFromPropertyList buf len {}", len);
     let ptr = env.mem.alloc(len);
@@ -195,7 +207,10 @@ fn deserialize_plist(
         }
         Value::Date(date_val) => {
             let time: SystemTime = (*date_val).into();
-            let time_interval = time.duration_since(apple_epoch()).unwrap().as_secs_f64();
+            let time_interval = match time.duration_since(apple_epoch()) {
+                Ok(d) => d.as_secs_f64(),
+                Err(e) => -(e.duration().as_secs_f64()), // before epoch → negative
+            };
             let date: id = msg_class![env; NSDate alloc];
             msg![env; date initWithTimeIntervalSinceReferenceDate:time_interval]
         }
@@ -303,13 +318,17 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
             NSNumberHostObject::Char(c) => Value::from(*c),
             _ => todo!("num {:?}", num),
         }
-    } else if class == env.objc.get_known_class("NSData", &mut env.mem) {
+    } else if {
+        let nsdata_class = env.objc.get_known_class("NSData", &mut env.mem);
+        env.objc.class_is_subclass_of(class, nsdata_class)
+    } {
+        // NSData or any subclass (e.g. NSMutableData), which share NSDataHostObject.
         let data = env.objc.borrow::<NSDataHostObject>(plist);
         let buffer_slice = env.mem.bytes_at(data.bytes.cast(), data.length);
         Value::Data(buffer_slice.to_vec())
     } else if class == env.objc.get_known_class("NSDate", &mut env.mem) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = apple_epoch().add(Duration::from_secs_f64(date.time_interval));
+        let time = if date.time_interval >= 0.0 { apple_epoch().add(Duration::from_secs_f64(date.time_interval)) } else { apple_epoch() - Duration::from_secs_f64(-date.time_interval) };
         Value::Date(time.into())
     } else {
         unimplemented!("class {}", env.objc.get_class_name(class))

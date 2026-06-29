@@ -303,6 +303,42 @@ forUndefinedKey:(id)key { // NSString*
     detach_new_thread_inner(env, sel, this, arg, /* tolerate_type_mismatch: */ true)
 }
 
+- (())performSelector:(SEL)sel
+             onThread:(id)_thread
+           withObject:(id)arg
+        waitUntilDone:(bool)wait {
+    // touchHLE can't dispatch to an arbitrary target thread, so route the
+    // perform through the main run loop (deferred). Crucially we must NOT run it
+    // synchronously inline: callers (e.g. HockeySDK's __HttpBridge) invoke this
+    // while holding a lock, and inline execution would re-enter and re-lock the
+    // same (non-recursive) mutex on the same thread. Deferring lets the lock be
+    // released first.
+    log_dbg!(
+        "performSelector:{} onThread:{:?} withObject:{:?} waitUntilDone:{}",
+        sel.as_str(&env.mem),
+        _thread,
+        arg,
+        wait
+    );
+    assert!(!sel.is_null());
+    // If we're already on the main thread and the caller wants to block until
+    // done, just run it now (deferring + waiting on ourselves would hang).
+    if wait && env.current_thread == 0 {
+        if sel.as_str(&env.mem).ends_with(':') {
+            () = msg_send(env, (this, sel, arg));
+        } else {
+            () = msg_send(env, (this, sel));
+        }
+        return;
+    }
+    let run_loop: id = msg_class![env; NSRunLoop mainRunLoop];
+    let sem = add_perform_request(env, run_loop, this, sel, arg, None, wait);
+    if wait {
+        sem_wait(env, sem);
+        host_destroy_semaphore(env, sem);
+    }
+}
+
 - (())performSelector:(SEL)sel withObject:(id)arg afterDelay:(NSTimeInterval)delay {
     let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
     add_perform_request(env, run_loop, this, sel, arg, Some(delay), false);

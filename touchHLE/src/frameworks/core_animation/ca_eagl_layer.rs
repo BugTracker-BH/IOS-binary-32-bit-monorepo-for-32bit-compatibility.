@@ -93,6 +93,27 @@ pub fn find_fullscreen_eagl_layer(env: &mut Environment) -> id {
             //       layer (typical example is 90° rotation).
             || !layer_host_obj.affine_transform.is_identity()
         {
+            // Diagnostic (logged once): explain why this layer isn't treated as
+            // a fullscreen layer, which forces the slow readback present path.
+            // Diagnostic only — no behavior change.
+            {
+                use std::sync::atomic::{AtomicBool, Ordering};
+                static WARNED: AtomicBool = AtomicBool::new(false);
+                if !WARNED.swap(true, Ordering::Relaxed) {
+                    let (bw, bh) = (layer_host_obj.bounds.size.width, layer_host_obj.bounds.size.height);
+                    let (ox, oy) = (layer_host_obj.bounds.origin.x, layer_host_obj.bounds.origin.y);
+                    let (sw, sh) = (screen_bounds.size.width, screen_bounds.size.height);
+                    let (ax, ay) = (layer_host_obj.anchor_point.x, layer_host_obj.anchor_point.y);
+                    let (px, py) = (layer_host_obj.position.x, layer_host_obj.position.y);
+                    let hidden = layer_host_obj.hidden;
+                    let opacity = layer_host_obj.opacity;
+                    let identity = layer_host_obj.affine_transform.is_identity();
+                    log!(
+                        "[fullscreen-detect] layer {:?} rejected -> SLOW present path. bounds={}x{} origin=({},{}) screen={}x{} anchor=({},{}) pos=({},{}) hidden={} opacity={} identity_transform={}",
+                        layer, bw, bh, ox, oy, sw, sh, ax, ay, px, py, hidden, opacity, identity
+                    );
+                }
+            }
             return nil;
         }
 

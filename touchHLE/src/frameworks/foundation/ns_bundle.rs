@@ -75,6 +75,10 @@ pub const CLASSES: ClassExports = objc_classes! {
    }
 }
 
++ (id)bundleWithPath:(id)_path { // NSString* — for now, always return mainBundle
+    msg_class![env; NSBundle mainBundle]
+}
+
 + (id)preferredLocalizationsFromArray:(id)localizations_array { // NSArray<NSString *> *
     let preferredLocalizations = CFBundleCopyPreferredLocalizationsFromArray(env, localizations_array);
     autorelease(env, preferredLocalizations)
@@ -306,6 +310,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let info_dict = msg![env; this infoDictionary];
     // TODO: return the localized value of a key when one is available
     msg![env; info_dict objectForKey:key]
+}
+
+- (id)localizedInfoDictionary {
+    // Returns the localized Info.plist dict; fall back to regular infoDictionary
+    msg![env; this infoDictionary]
 }
 
 - (id)localizations {
