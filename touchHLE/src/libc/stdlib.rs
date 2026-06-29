@@ -576,6 +576,40 @@ fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
     }
 }
 
+// 64-bit (`long long`) versions of the libgcc div/mod helpers. Same rationale as
+// the 32-bit ones. Signed variants take u64 args and reinterpret, to avoid
+// depending on an `i64: GuestArg` impl.
+fn __udivdi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        0
+    } else {
+        a / b
+    }
+}
+fn __umoddi3(_env: &mut Environment, a: u64, b: u64) -> u64 {
+    if b == 0 {
+        0
+    } else {
+        a % b
+    }
+}
+fn __divdi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
+    let (a, b) = (a as i64, b as i64);
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_div(b)
+    }
+}
+fn __moddi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
+    let (a, b) = (a as i64, b as i64);
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_rem(b)
+    }
+}
+
 fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -721,6 +755,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__umodsi3(_, _)),
     export_c_func!(__divsi3(_, _)),
     export_c_func!(__modsi3(_, _)),
+    export_c_func!(__udivdi3(_, _)),
+    export_c_func!(__umoddi3(_, _)),
+    export_c_func!(__divdi3(_, _)),
+    export_c_func!(__moddi3(_, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),

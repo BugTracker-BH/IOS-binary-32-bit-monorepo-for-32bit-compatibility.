@@ -10,7 +10,7 @@ use super::NSTimeInterval;
 use super::{ns_run_loop, ns_string};
 use crate::objc::{
     autorelease, id, msg, msg_class, msg_send, nil, objc_classes, release, retain, ClassExports,
-    HostObject, SEL,
+    HostObject, NSZonePtr, SEL,
 };
 use crate::Environment;
 use std::time::{Duration, Instant};
@@ -41,6 +41,66 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 // NSTimer doesn't seem to be an abstract class?
 @implementation NSTimer: NSObject
+
++ (id)allocWithZone:(NSZonePtr)_zone {
+    // Blank timer; the real fields are filled in by an `init…` method. (The
+    // `+timerWithTimeInterval:` class methods build the host object directly and
+    // don't go through here.)
+    let host_object = Box::new(NSTimerHostObject {
+        ns_interval: 0.0,
+        rust_interval: Duration::ZERO,
+        target: nil,
+        selector: SEL::null(),
+        user_info: nil,
+        repeats: false,
+        due_by: None,
+        is_running_callback: false,
+        run_loop: nil,
+    });
+    env.objc.alloc_object(this, host_object, &mut env.mem)
+}
+
+// Designated initializer, used via `[[NSTimer alloc] initWithFireDate:...]`.
+- (id)initWithFireDate:(id)date // NSDate*
+              interval:(NSTimeInterval)ns_interval
+                target:(id)target
+              selector:(SEL)selector
+              userInfo:(id)user_info
+               repeats:(bool)repeats {
+    let ns_interval = ns_interval.max(0.0001);
+    let rust_interval = Duration::from_secs_f64(ns_interval);
+
+    retain(env, target);
+    retain(env, user_info);
+
+    // First fire is at `date`; if that's now/past, fire as soon as possible.
+    let secs_until_fire: NSTimeInterval = if date == nil {
+        0.0
+    } else {
+        msg![env; date timeIntervalSinceNow]
+    };
+    let due_by = Instant::now().checked_add(Duration::from_secs_f64(secs_until_fire.max(0.0)));
+
+    let host = env.objc.borrow_mut::<NSTimerHostObject>(this);
+    host.ns_interval = ns_interval;
+    host.rust_interval = rust_interval;
+    host.target = target;
+    host.selector = selector;
+    host.user_info = user_info;
+    host.repeats = repeats;
+    host.due_by = due_by;
+
+    log_dbg!(
+        "[[NSTimer alloc] initWithFireDate:...] {:?}, interval {}s, target [{:?} {}], repeats {}",
+        this,
+        ns_interval,
+        target,
+        selector.as_str(&env.mem),
+        repeats,
+    );
+
+    this
+}
 
 + (id)timerWithTimeInterval:(NSTimeInterval)ns_interval
                      target:(id)target
