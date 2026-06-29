@@ -250,9 +250,8 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)createDirectoryAtPath:(id)path // NSString *
   withIntermediateDirectories:(bool)with_intermediates
-                   attributes:(id)attributes // NSDictionary*
+                   attributes:(id)_attributes // NSDictionary* — ignored (TODO: apply permissions)
                         error:(MutPtr<id>)error { // NSError**
-    assert_eq!(attributes, nil); // TODO
 
     let path_str = ns_string::to_rust_string(env, path); // TODO: avoid copy
     let res = if with_intermediates {
