@@ -15,6 +15,17 @@ use crate::objc::{
 use crate::Environment;
 use std::time::{Duration, Instant};
 
+/// Safe Duration from f64 that clamps negatives/NaN to zero.
+fn safe_duration(secs: f64) -> Duration {
+    if secs.is_nan() || secs <= 0.0 {
+        Duration::ZERO
+    } else if secs > 1e15 {
+        Duration::from_secs(1_000_000) // cap at ~11 days to avoid overflow
+    } else {
+        Duration::from_secs_f64(secs)
+    }
+}
+
 struct NSTimerHostObject {
     ns_interval: NSTimeInterval,
     /// Copy of `ns_interval` in Rust's type for time intervals. Keep in sync!
@@ -66,7 +77,7 @@ pub const CLASSES: ClassExports = objc_classes! {
                    userInfo:(id)user_info
                     repeats:(bool)repeats {
     let ns_interval = ns_interval.max(0.0001);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    let rust_interval = safe_duration(ns_interval);
 
     retain(env, target);
     retain(env, user_info);
@@ -123,7 +134,7 @@ pub const CLASSES: ClassExports = objc_classes! {
               userInfo:(id)user_info
                repeats:(bool)repeats {
     let ns_interval = ns_interval.max(0.0001);
-    let rust_interval = Duration::from_secs_f64(ns_interval);
+    let rust_interval = safe_duration(ns_interval);
 
     retain(env, target);
     retain(env, user_info);
@@ -134,7 +145,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     } else {
         msg![env; date timeIntervalSinceNow]
     };
-    let due_by = Instant::now().checked_add(Duration::from_secs_f64(secs_until_fire.max(0.0)));
+    let due_by = Instant::now().checked_add(safe_duration(secs_until_fire));
 
     let host = env.objc.borrow_mut::<NSTimerHostObject>(this);
     host.ns_interval = ns_interval;
@@ -221,7 +232,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 pub fn set_time_interval(env: &mut Environment, timer: id, interval: NSTimeInterval) {
     let host_object = env.objc.borrow_mut::<NSTimerHostObject>(timer);
     host_object.ns_interval = interval;
-    host_object.rust_interval = Duration::from_secs_f64(interval);
+    host_object.rust_interval = safe_duration(interval);
 }
 
 /// For use by `NSRunLoop`
