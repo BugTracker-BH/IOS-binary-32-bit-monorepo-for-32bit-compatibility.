@@ -511,6 +511,71 @@ fn strtoull(
     }
 }
 
+fn strtoll(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i64 {
+    // TODO: handle errno properly
+    set_errno(env, 0);
+
+    let parse_res = str_to_int_inner_generic(
+        env,
+        |env, s, idx| Ok(env.mem.read(s + idx)),
+        |_, _, _| (),
+        str.cast_mut(),
+        0,
+        base.try_into().unwrap(),
+        u32::MAX,
+        |s, base| i64::from_str_radix(s, base).unwrap_or(i64::MAX),
+        |num| num.wrapping_neg(),
+    );
+    match parse_res {
+        Ok((res, len)) => {
+            if !endptr.is_null() {
+                env.mem.write(endptr, (str + len).cast_mut());
+            }
+            res
+        }
+        Err(_) => {
+            if !endptr.is_null() {
+                env.mem.write(endptr, str.cast_mut());
+            }
+            0
+        }
+    }
+}
+
+// libgcc integer division/modulo helpers. Older armv7 has no hardware integer
+// divide, so the compiler emits calls to these (and the app calls `__umodsi3`
+// directly). They normally come from libgcc, which we don't link — and no-op'ing
+// them returns 0, which silently corrupts every division/modulo. So implement
+// them for real. Division by zero is UB in C; we return 0 to avoid a host panic.
+fn __udivsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        0
+    } else {
+        a / b
+    }
+}
+fn __umodsi3(_env: &mut Environment, a: u32, b: u32) -> u32 {
+    if b == 0 {
+        0
+    } else {
+        a % b
+    }
+}
+fn __divsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_div(b)
+    }
+}
+fn __modsi3(_env: &mut Environment, a: i32, b: i32) -> i32 {
+    if b == 0 {
+        0
+    } else {
+        a.wrapping_rem(b)
+    }
+}
+
 fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -651,6 +716,11 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(strtoul(_, _, _)),
     export_c_func!(wcstoul(_, _, _)),
     export_c_func!(strtoull(_, _, _)),
+    export_c_func!(strtoll(_, _, _)),
+    export_c_func!(__udivsi3(_, _)),
+    export_c_func!(__umodsi3(_, _)),
+    export_c_func!(__divsi3(_, _)),
+    export_c_func!(__modsi3(_, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),
