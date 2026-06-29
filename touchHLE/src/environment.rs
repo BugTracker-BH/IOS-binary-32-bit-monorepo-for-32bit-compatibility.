@@ -270,8 +270,8 @@ impl Environment {
         // window rotation after-the-fact is somewhat glitchy.
         // This also ensures the splash screen is correctly oriented.
         if options.initial_orientation == window::DeviceOrientation::Portrait {
-            if let Some(&non_portrait_orientation) = bundle
-                .supported_interface_orientations()
+            let orientations = bundle.supported_interface_orientations();
+            if let Some(&non_portrait_orientation) = orientations
                 .iter()
                 .find(|&&o| o != "UIInterfaceOrientationPortrait")
             {
@@ -283,7 +283,20 @@ impl Environment {
                     // (UI)DeviceOrientation values (content has to rotate in
                     // the opposite direction to how the device rotates).
                     "UIInterfaceOrientationPortraitUpsideDown" => {
-                        window::DeviceOrientation::PortraitUpsideDown
+                        // An app that supports BOTH Portrait and PortraitUpsideDown
+                        // (e.g. Paper Toss World Tour) runs fine right-side up;
+                        // honouring upside-down just renders it inverted on a
+                        // normally-held device. Prefer normal Portrait when the app
+                        // supports it. (Apps that only support upside-down still get
+                        // PortraitUpsideDown.)
+                        if orientations
+                            .iter()
+                            .any(|&o| o == "UIInterfaceOrientationPortrait")
+                        {
+                            window::DeviceOrientation::Portrait
+                        } else {
+                            window::DeviceOrientation::PortraitUpsideDown
+                        }
                     }
                     "UIInterfaceOrientationLandscapeLeft" => {
                         window::DeviceOrientation::LandscapeRight
