@@ -749,6 +749,13 @@ fn glNormalPointer(env: &mut Environment, type_: GLenum, stride: GLsizei, pointe
         gles.NormalPointer(type_, stride, pointer)
     })
 }
+thread_local! {
+    // (guest_ptr_bits, size, stride) of the most recent glTexCoordPointer, so a
+    // draw can read the texcoords actually in effect for it.
+    static LAST_TEXCOORD_PTR: std::cell::Cell<(u32, i32, i32)> =
+        std::cell::Cell::new((0, 0, 0));
+}
+
 fn glTexCoordPointer(
     env: &mut Environment,
     size: GLint,
@@ -756,6 +763,7 @@ fn glTexCoordPointer(
     stride: GLsizei,
     pointer: ConstVoidPtr,
 ) {
+    LAST_TEXCOORD_PTR.with(|c| c.set((pointer.to_bits(), size, stride)));
     {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
@@ -831,30 +839,45 @@ fn glVertexPointer(
 
 // Drawing
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
-    with_ctx_and_mem(env, |gles, _mem| unsafe {
+    with_ctx_and_mem(env, |gles, mem| unsafe {
         {
-            // Diagnostic (first few draws): dump the live modelview/projection
-            // matrices and viewport, to see the actual transform applied to the
-            // (set-once) vertex quad. An X-axis collapse shows up here.
+            // Target VISIBLE photo/sprite draws: non-degenerate modelview scale and
+            // a higher texture id (the menu's pinned photos). Frame-1 captures
+            // missed these because they were issued at zero scale. Read the
+            // texcoords actually in effect (tracked at glTexCoordPointer time).
             use std::sync::atomic::{AtomicU32, Ordering};
             static N: AtomicU32 = AtomicU32::new(0);
-            let n = N.fetch_add(1, Ordering::Relaxed);
-            if n < 64 {
-                let mut mv = [0.0f32; 16];
-                let mut proj = [0.0f32; 16];
-                let mut vp = [0i32; 4];
-                gles.GetFloatv(gles11::MODELVIEW_MATRIX, mv.as_mut_ptr());
-                gles.GetFloatv(gles11::PROJECTION_MATRIX, proj.as_mut_ptr());
-                gles.GetIntegerv(gles11::VIEWPORT, vp.as_mut_ptr());
-                let mut texmat = [0.0f32; 16];
-                gles.GetFloatv(0x0BA8 /* GL_TEXTURE_MATRIX */, texmat.as_mut_ptr());
-                let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
-                let mut bound = 0i32;
-                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
-                log!(
-                    "[draw-diag] glDrawArrays #{} mode=0x{:x} first={} count={} viewport={:?} tex2d={} bound_tex={} texmatrix={:?} modelview={:?} projection={:?}",
-                    n, mode, first, count, vp, tex2d, bound, texmat, mv, proj
-                );
+            let mut mv = [0.0f32; 16];
+            gles.GetFloatv(gles11::MODELVIEW_MATRIX, mv.as_mut_ptr());
+            let mut bound = 0i32;
+            gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
+            let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
+            let scale_x = mv[0].abs();
+            let scale_y = mv[5].abs();
+            if tex2d && bound >= 5 && scale_x > 1.0 && scale_y > 1.0 {
+                let n = N.fetch_add(1, Ordering::Relaxed);
+                if n < 40 {
+                    let (tcptr, tcsize, tcstride) = LAST_TEXCOORD_PTR.with(|c| c.get());
+                    let mut tc = Vec::new();
+                    if tcptr > 0x1000 && tcsize > 0 {
+                        let step = if tcstride == 0 { tcsize as u32 } else { (tcstride / 4) as u32 };
+                        for v in 0..4u32 {
+                            let mut comps = Vec::new();
+                            for c in 0..(tcsize as u32) {
+                                comps.push(
+                                    mem.read(crate::mem::Ptr::<f32, false>::from_bits(
+                                        tcptr + (v * step + c) * 4,
+                                    )),
+                                );
+                            }
+                            tc.push(comps);
+                        }
+                    }
+                    log!(
+                        "[thumb-diag] #{} tex={} scale={:.1}x{:.1} pos=({:.0},{:.0}) off_diag=[{:.3},{:.3}] texcoord={:?}",
+                        n, bound, scale_x, scale_y, mv[12], mv[13], mv[1], mv[4], tc
+                    );
+                }
             }
         }
         let fog_state_backup = clamp_fog_state_values(gles);
