@@ -612,12 +612,26 @@ unsafe fn composite_layer_recursive(
         // Reposition and scale the unit quad (see ARRAY_BUFFER binding)
         // so it will have the right size in this layer's co-ordinate space.
         gles.MatrixMode(gles11::MODELVIEW);
-        load_matrix(
-            gles.as_mut(),
-            Matrix::<4>::from(&Matrix::scale_2d(bounds.size.width, bounds.size.height))
-                .multiply(&Matrix::translate_3d(bounds.origin.x, bounds.origin.y, 0.0))
-                .multiply(&cumulative_transform),
-        );
+        let modelview = Matrix::<4>::from(&Matrix::scale_2d(bounds.size.width, bounds.size.height))
+            .multiply(&Matrix::translate_3d(bounds.origin.x, bounds.origin.y, 0.0))
+            .multiply(&cumulative_transform);
+        // Diagnostic (logged once) for the EAGL/presented-pixels layer: dump the
+        // geometry feeding the quad so we can see how the portrait + 180°
+        // transform maps it. Diagnostic only.
+        if host_obj.presented_pixels.is_some() {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static WARNED: AtomicBool = AtomicBool::new(false);
+            if !WARNED.swap(true, Ordering::Relaxed) {
+                let (bw, bh) = (bounds.size.width, bounds.size.height);
+                let (ox, oy) = (bounds.origin.x, bounds.origin.y);
+                log!(
+                    "[layer-mv-diag] EAGL layer bounds={}x{} origin=({},{}) final_modelview_columns={:?}",
+                    bw, bh, ox, oy,
+                    modelview.columns()
+                );
+            }
+        }
+        load_matrix(gles.as_mut(), modelview);
 
         cumulative_transform
     };
