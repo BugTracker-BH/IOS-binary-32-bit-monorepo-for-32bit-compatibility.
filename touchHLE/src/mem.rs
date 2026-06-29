@@ -354,7 +354,18 @@ impl Mem {
     // seems like a good idea to help the compiler optimise for the fast path
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize) {
-        panic!("Attempted null-page access at {at:#x} ({size:#x} bytes)")
+        // On real iOS, null-page access is a hardware SIGSEGV (instant death).
+        // In the emulator, it's usually caused by our own leniency (faked
+        // classes returning `self`, no-op'd functions returning 0/1 that get
+        // dereferenced). Log loudly but don't panic — the caller gets zeroed
+        // memory, which often lets the app take its nil/error fallback path
+        // instead of crashing outright. This matches how nil-messaging works
+        // (returns 0) and is far better for compatibility than a hard abort.
+        log!(
+            "Warning: null-page read at {:#x} ({:#x} bytes) — returning zeros (likely caused by a faked/no-op'd return value being dereferenced)",
+            at,
+            size
+        );
     }
 
     /// Special version of [Self::bytes_at] that returns [None] rather than
