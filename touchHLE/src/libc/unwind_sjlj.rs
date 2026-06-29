@@ -452,11 +452,83 @@ fn _ZNSsC2EPKcRKSaIcE(
     string_from_cstr_nullsafe(env, this, s, alloc, "__ZNSsC2EPKcRKSaIcE")
 }
 
+// TEMPORARY DIAGNOSTIC: intercept the guest's sqlite3 SQL-prep calls, log the SQL
+// string, then forward to the real guest libsqlite3 (host functions take link
+// precedence over the dylib export, but the dylib's own copy is still callable at
+// its exported address — same re-dispatch trick as the std::string shim). This
+// reveals the statement that errors with `near "Column"` in JellyCar 3.
+#[allow(non_snake_case)]
+fn sqlite3_prepare_v2(
+    env: &mut Environment,
+    db: MutVoidPtr,
+    zSql: ConstPtr<u8>,
+    nByte: i32,
+    ppStmt: MutVoidPtr,
+    pzTail: MutVoidPtr,
+) -> i32 {
+    if !zSql.is_null() {
+        let sql = env
+            .mem
+            .cstr_at_utf8(zSql)
+            .map(|s| s.to_owned())
+            .unwrap_or_else(|_| "<non-utf8>".to_string());
+        log!("[sqlite-diag] prepare_v2: {:?}", sql);
+    }
+    let real = resolve_guest_export(env, "_sqlite3_prepare_v2");
+    real.call_from_host(env, (db, zSql, nByte, ppStmt, pzTail))
+}
+
+#[allow(non_snake_case)]
+fn sqlite3_prepare(
+    env: &mut Environment,
+    db: MutVoidPtr,
+    zSql: ConstPtr<u8>,
+    nByte: i32,
+    ppStmt: MutVoidPtr,
+    pzTail: MutVoidPtr,
+) -> i32 {
+    if !zSql.is_null() {
+        let sql = env
+            .mem
+            .cstr_at_utf8(zSql)
+            .map(|s| s.to_owned())
+            .unwrap_or_else(|_| "<non-utf8>".to_string());
+        log!("[sqlite-diag] prepare: {:?}", sql);
+    }
+    let real = resolve_guest_export(env, "_sqlite3_prepare");
+    real.call_from_host(env, (db, zSql, nByte, ppStmt, pzTail))
+}
+
+#[allow(non_snake_case)]
+fn sqlite3_exec(
+    env: &mut Environment,
+    db: MutVoidPtr,
+    sql: ConstPtr<u8>,
+    callback: MutVoidPtr,
+    arg: MutVoidPtr,
+    errmsg: MutVoidPtr,
+) -> i32 {
+    if !sql.is_null() {
+        let s = env
+            .mem
+            .cstr_at_utf8(sql)
+            .map(|s| s.to_owned())
+            .unwrap_or_else(|_| "<non-utf8>".to_string());
+        log!("[sqlite-diag] exec: {:?}", s);
+    }
+    let real = resolve_guest_export(env, "_sqlite3_exec");
+    real.call_from_host(env, (db, sql, callback, arg, errmsg))
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_throw(_, _, _)),
     // NULL-tolerant std::string(const char*, allocator) — see above.
     export_c_func!(_ZNSsC1EPKcRKSaIcE(_, _, _)),
     export_c_func!(_ZNSsC2EPKcRKSaIcE(_, _, _)),
+    // TEMP DIAGNOSTIC: log SQL passed to guest sqlite, then forward to the real one.
+    export_c_func!(sqlite3_prepare_v2(_, _, _, _, _)),
+    export_c_func!(sqlite3_prepare(_, _, _, _, _)),
+    export_c_func!(sqlite3_exec(_, _, _, _, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_GetContext()),
