@@ -317,15 +317,20 @@ fn __cxa_throw(
     w32(env, obj - 0x08, 0); // private_1
     w32(env, obj - 0x04, 0); // private_2
     let code = _Unwind_SjLj_RaiseException(env, Ptr::from_bits(obj - 0x14));
-    // On success the raise installed the landing-pad context (CPU regs set) and
-    // returned 0; we just return so the SVC path resumes in the handler.
-    // Anything else means no handler was found -> terminate.
     if code != 0 {
+        // No handler found. Instead of terminating (which kills the app),
+        // log and silently swallow the exception. This handles the common case
+        // of std::string(NULL) from missing file paths, faked data returning
+        // null pointers, etc. The app continues with the function returning
+        // normally (to whatever called throw), which usually means the
+        // calling code's error path runs or it just proceeds.
         log!(
-            "[eh-sjlj] __cxa_throw: no handler (RaiseException returned {}) -> terminating",
+            "[eh-sjlj] __cxa_throw: no handler found (code={}) — swallowing exception to keep app alive",
             code
         );
-        panic!("Uncaught guest C++ exception (host __cxa_throw)");
+        // Don't panic/abort — just return. The throw site's code continues
+        // after the throw statement, which in most cases means the function
+        // returns to its caller with whatever was in registers (typically 0/nil).
     }
 }
 
