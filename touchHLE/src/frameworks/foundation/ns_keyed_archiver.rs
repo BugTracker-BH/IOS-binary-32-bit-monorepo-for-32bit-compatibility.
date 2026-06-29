@@ -76,6 +76,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     msg![env; data writeToFile:file atomically:true]
 }
 
+- (id)initForWritingWithMutableData:(id)data { // NSMutableData*
+    // Store the data reference; finishEncoding will serialize into it.
+    env.objc.borrow_mut::<NSKeyedArchiverHostObject>(this).encoded_data = data;
+    this
+}
+
 - (())encodeObject:(id)object // NSCoding *
             forKey:(id)key { // NSString *
     let key = normalize_key(env, key);
