@@ -769,20 +769,39 @@ fn atlas_texcoord_offset(mem: &crate::mem::Mem) -> (f32, f32) {
         return (0.0, 0.0);
     }
     let step: u32 = if tcstride == 0 { tcsize as u32 } else { (tcstride / 4) as u32 };
-    let (mut min_u, mut min_v) = (f32::INFINITY, f32::INFINITY);
+    let (mut min_u, mut max_u) = (f32::INFINITY, f32::NEG_INFINITY);
+    let (mut min_v, mut max_v) = (f32::INFINITY, f32::NEG_INFINITY);
     for v in 0..4u32 {
         let u: f32 = mem.read(crate::mem::Ptr::<f32, false>::from_bits(tcptr + (v * step) * 4));
         let w: f32 = mem.read(crate::mem::Ptr::<f32, false>::from_bits(tcptr + (v * step + 1) * 4));
-        if u < min_u {
-            min_u = u;
-        }
-        if w < min_v {
-            min_v = w;
-        }
+        min_u = min_u.min(u);
+        max_u = max_u.max(u);
+        min_v = min_v.min(w);
+        max_v = max_v.max(w);
     }
-    let tx = if min_u.is_finite() && min_u < -2.0 { -min_u } else { 0.0 };
-    let ty = if min_v.is_finite() && min_v < -2.0 { -min_v } else { 0.0 };
-    (tx, ty)
+    (axis_offset(min_u, max_u), axis_offset(min_v, max_v))
+}
+
+/// Texture-matrix translation for one axis of a quad's texcoords. Only large
+/// negative atlas offsets are touched; in/near-range coords return 0 (left to
+/// GL_REPEAT).
+fn axis_offset(min: f32, max: f32) -> f32 {
+    if !min.is_finite() || !max.is_finite() || min >= -2.0 {
+        return 0.0;
+    }
+    if min.floor() != max.floor() {
+        // The quad straddles a texture-cell boundary, so plain GL_REPEAT would
+        // wrap it across the texture edge into blank padding. These sprites (the
+        // map's individual photo textures) keep their content at the texture
+        // origin, so align the quad's min corner to 0.
+        -min
+    } else {
+        // The quad stays within a single cell (a glyph / fixed atlas sub-rect,
+        // e.g. the in-game "Submit/Score/Best/Menu" text). Strip only the integer
+        // part so GL_REPEAT samples the intended sub-rect, preserving its atlas
+        // position instead of collapsing it to the origin.
+        -min.floor()
+    }
 }
 
 fn glTexCoordPointer(
