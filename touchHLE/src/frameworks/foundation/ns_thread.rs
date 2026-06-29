@@ -123,6 +123,14 @@ pub const CLASSES: ClassExports = objc_classes! {
     env.current_thread == 0
 }
 
+- (bool)isMainThread {
+    // The overwhelmingly common idiom is `[[NSThread currentThread] isMainThread]`,
+    // where the receiver is the executing thread, so reporting whether we're on
+    // thread 0 (the main thread) is correct for that usage and mirrors the class
+    // method above.
+    env.current_thread == 0
+}
+
 - (id)initWithTarget:(id)target
             selector:(SEL)selector
               object:(id)object {
