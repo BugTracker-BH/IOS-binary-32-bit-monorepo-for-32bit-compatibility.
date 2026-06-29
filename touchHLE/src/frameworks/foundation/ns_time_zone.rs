@@ -39,6 +39,17 @@ pub const CLASSES: ClassExports = objc_classes! {
     autorelease(env, new)
 }
 
++ (id)timeZoneForSecondsFromGMT:(NSInteger)seconds {
+    // Build a name like "GMT+0530" or "GMT-0100" from a raw offset in seconds.
+    let sign = if seconds < 0 { '-' } else { '+' };
+    let abs_sec = seconds.unsigned_abs();
+    let hours = abs_sec / 3600;
+    let mins = (abs_sec % 3600) / 60;
+    let name = format!("GMT{}{:02}{:02}", sign, hours, mins);
+    let name_ns = ns_string::from_rust_string(env, name);
+    msg![env; this timeZoneWithName:name_ns]
+}
+
 + (id)localTimeZone {
     // According to docs, `localTimeZone` is not cached in contrast to
     // `systemTimeZone`
