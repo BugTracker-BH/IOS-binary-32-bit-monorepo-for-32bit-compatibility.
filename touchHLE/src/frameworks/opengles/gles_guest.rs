@@ -793,34 +793,6 @@ fn glTexCoordPointer(
     pointer: ConstVoidPtr,
 ) {
     LAST_TEXCOORD_PTR.with(|c| c.set((pointer.to_bits(), size, stride)));
-    {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static N: AtomicU32 = AtomicU32::new(0);
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        if n < 64 {
-            log!(
-                "[diag-ptr] glTexCoordPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
-                size, type_, stride, pointer.to_bits()
-            );
-            // Dump the first 4 vertices' texcoords from guest memory (client array,
-            // FLOAT only). If U (first component) is constant while V varies, the
-            // horizontal smear is a client-texcoord-array read bug.
-            if type_ == 0x1406 && pointer.to_bits() > 0x1000 {
-                let step: u32 = if stride == 0 { size as u32 } else { (stride / 4) as u32 };
-                let base = pointer.to_bits();
-                let mut verts = Vec::new();
-                for v in 0..4u32 {
-                    let mut comps = Vec::new();
-                    for c in 0..(size as u32) {
-                        let p = crate::mem::Ptr::<f32, false>::from_bits(base + (v * step + c) * 4);
-                        comps.push(env.mem.read(p));
-                    }
-                    verts.push(comps);
-                }
-                log!("[diag-data] texcoord first4={:?}", verts);
-            }
-        }
-    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pointer =
             translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
@@ -834,31 +806,6 @@ fn glVertexPointer(
     stride: GLsizei,
     pointer: ConstVoidPtr,
 ) {
-    {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static N: AtomicU32 = AtomicU32::new(0);
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        if n < 20 {
-            log!(
-                "[diag-ptr] glVertexPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
-                size, type_, stride, pointer.to_bits()
-            );
-            if type_ == 0x1406 && pointer.to_bits() > 0x1000 {
-                let step: u32 = if stride == 0 { size as u32 } else { (stride / 4) as u32 };
-                let base = pointer.to_bits();
-                let mut verts = Vec::new();
-                for v in 0..4u32 {
-                    let mut comps = Vec::new();
-                    for c in 0..(size as u32) {
-                        let p = crate::mem::Ptr::<f32, false>::from_bits(base + (v * step + c) * 4);
-                        comps.push(env.mem.read(p));
-                    }
-                    verts.push(comps);
-                }
-                log!("[diag-data] vertex first4={:?}", verts);
-            }
-        }
-    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let pointer =
             translate_pointer_or_offset_to_host(gles, mem, pointer, gles11::ARRAY_BUFFER_BINDING);
@@ -1249,50 +1196,6 @@ fn glTexImage2D(
     pixels: ConstVoidPtr,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        {
-            // Diagnostic: log each texture's dimensions + power-of-two-ness, to
-            // compare the working background vs the garbled photo thumbnails.
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static N: AtomicU32 = AtomicU32::new(0);
-            let n = N.fetch_add(1, Ordering::Relaxed);
-            if n < 48 {
-                let mut bound = 0i32;
-                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
-                let pot_w = width > 0 && (width & (width - 1)) == 0;
-                let pot_h = height > 0 && (height & (height - 1)) == 0;
-                log!(
-                    "[teximg-diag] tex={} level={} {}x{} fmt=0x{:x} type=0x{:x} pot={}x{}",
-                    bound, level, width, height, format, type_, pot_w, pot_h
-                );
-            }
-        }
-        // ASCII preview of 128x128 RGBA photo textures, to SEE how the photo is
-        // laid out in the texture (normal vs stored-wrapped across the edges).
-        if width == 128 && height == 128 && format == 0x1908 && !pixels.is_null() {
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static M: AtomicU32 = AtomicU32::new(0);
-            let m = M.fetch_add(1, Ordering::Relaxed);
-            if m < 3 {
-                let mut bound = 0i32;
-                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
-                let base = pixels.to_bits();
-                let ramp = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
-                log!("[tex-ascii] tex={} (128x128, each char = 8px):", bound);
-                for gy in 0..16u32 {
-                    let mut line = String::with_capacity(16);
-                    for gx in 0..16u32 {
-                        let (x, y) = (gx * 8, gy * 8);
-                        let off = (y * 128 + x) * 4;
-                        let r: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off));
-                        let g: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off + 1));
-                        let b: u8 = mem.read(crate::mem::Ptr::<u8, false>::from_bits(base + off + 2));
-                        let lum = (r as u32 + g as u32 + b as u32) / 3;
-                        line.push(ramp[(lum as usize * (ramp.len() - 1)) / 255]);
-                    }
-                    log!("[tex-ascii] |{}|", line);
-                }
-            }
-        }
         let pixels = if pixels.is_null() {
             std::ptr::null()
         } else {

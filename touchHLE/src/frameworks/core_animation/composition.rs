@@ -152,23 +152,6 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         env.window().virtual_cursor_visible_at(),
     );
 
-    // Desktop diagnostic (logged once): dump the dimensions driving composition
-    // so we can see any portrait mismatch that causes the garbled/banded output.
-    // Diagnostic only (cfg desktop) — no behavior change, cannot affect JellyCar.
-    #[cfg(not(target_os = "ios"))]
-    {
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static WARNED: AtomicBool = AtomicBool::new(false);
-        if !WARNED.swap(true, Ordering::Relaxed) {
-            let (sw, sh) = (screen_bounds.size.width, screen_bounds.size.height);
-            let (vx, vy, vw, vh) = present_frame_args.0;
-            log!(
-                "[compositor-diag-desktop] screen_bounds={}x{} scale_hack={} fb={}x{} viewport=({},{},{},{}) num_window_layers={}",
-                sw, sh, scale_hack, fb_width, fb_height, vx, vy, vw, vh, window_layers.len()
-            );
-        }
-    }
-
     // TODO: draw status bar if it's not hidden
 
     // Initial state for layer tree traversal (see composite_layer_recursive)
@@ -612,26 +595,12 @@ unsafe fn composite_layer_recursive(
         // Reposition and scale the unit quad (see ARRAY_BUFFER binding)
         // so it will have the right size in this layer's co-ordinate space.
         gles.MatrixMode(gles11::MODELVIEW);
-        let modelview = Matrix::<4>::from(&Matrix::scale_2d(bounds.size.width, bounds.size.height))
-            .multiply(&Matrix::translate_3d(bounds.origin.x, bounds.origin.y, 0.0))
-            .multiply(&cumulative_transform);
-        // Diagnostic (logged once) for the EAGL/presented-pixels layer: dump the
-        // geometry feeding the quad so we can see how the portrait + 180°
-        // transform maps it. Diagnostic only.
-        if host_obj.presented_pixels.is_some() {
-            use std::sync::atomic::{AtomicBool, Ordering};
-            static WARNED: AtomicBool = AtomicBool::new(false);
-            if !WARNED.swap(true, Ordering::Relaxed) {
-                let (bw, bh) = (bounds.size.width, bounds.size.height);
-                let (ox, oy) = (bounds.origin.x, bounds.origin.y);
-                log!(
-                    "[layer-mv-diag] EAGL layer bounds={}x{} origin=({},{}) final_modelview_columns={:?}",
-                    bw, bh, ox, oy,
-                    modelview.columns()
-                );
-            }
-        }
-        load_matrix(gles.as_mut(), modelview);
+        load_matrix(
+            gles.as_mut(),
+            Matrix::<4>::from(&Matrix::scale_2d(bounds.size.width, bounds.size.height))
+                .multiply(&Matrix::translate_3d(bounds.origin.x, bounds.origin.y, 0.0))
+                .multiply(&cumulative_transform),
+        );
 
         cumulative_transform
     };

@@ -501,22 +501,6 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
     let width_u32: u32 = width.try_into().unwrap();
     let height_u32: u32 = height.try_into().unwrap();
 
-    {
-        // Diagnostic (logged once): the actual GL storage size of the guest's
-        // renderbuffer. If this isn't the expected screen size (e.g. 320x480),
-        // the compositor maps mismatched pixels onto the layer quad, producing
-        // the vertical-smear/banding. Slow path only — JellyCar uses the fast
-        // path, so this can't affect it.
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static WARNED: AtomicBool = AtomicBool::new(false);
-        if !WARNED.swap(true, Ordering::Relaxed) {
-            log!(
-                "[readback-diag] guest renderbuffer {} storage size = {}x{} (logged once)",
-                renderbuffer, width_u32, height_u32
-            );
-        }
-    }
-
     // To avoid confusing the guest app, we need to be able to undo any
     // state changes we make.
     let old_framebuffer: GLuint = get_int(gles, gles11::FRAMEBUFFER_BINDING_OES) as _;
@@ -571,50 +555,6 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
         Instant::now().saturating_duration_since(before)
     );
     pixel_buffer.set_len(size);
-
-    {
-        // Diagnostic (logged once): sample the readback at the center column for
-        // several rows. If each sampled row is a different *uniform* color, the
-        // banding already exists in the guest's rendered framebuffer (the GLES1-
-        // on-GL2 render is the culprit). If the samples show varied per-pixel
-        // content, the readback is fine and the banding is introduced later in
-        // present/composite.
-        use std::sync::atomic::{AtomicBool, Ordering};
-        static WARNED: AtomicBool = AtomicBool::new(false);
-        if !WARNED.swap(true, Ordering::Relaxed) && width_u32 >= 4 && height_u32 >= 4 {
-            let col = (width_u32 / 2) as usize;
-            let mut samples = Vec::new();
-            for frac in [0u32, 1, 2, 3, 4] {
-                let row = (frac * (height_u32 - 1) / 4) as usize;
-                let idx = (row * width_u32 as usize + col) * 4;
-                if idx + 4 <= pixel_buffer.len() {
-                    samples.push((
-                        row,
-                        [
-                            pixel_buffer[idx],
-                            pixel_buffer[idx + 1],
-                            pixel_buffer[idx + 2],
-                            pixel_buffer[idx + 3],
-                        ],
-                    ));
-                }
-            }
-            // Also sample 4 pixels across the middle row to see horizontal variation.
-            let mid_row = (height_u32 / 2) as usize;
-            let mut mid_samples = Vec::new();
-            for frac in [0u32, 1, 2, 3, 4] {
-                let c = (frac * (width_u32 - 1) / 4) as usize;
-                let idx = (mid_row * width_u32 as usize + c) * 4;
-                if idx + 4 <= pixel_buffer.len() {
-                    mid_samples.push((c, [pixel_buffer[idx], pixel_buffer[idx + 1], pixel_buffer[idx + 2]]));
-                }
-            }
-            log!(
-                "[readback-pixels] {}x{} center-col rows(rgba)={:?} ; mid-row cols(rgb)={:?}",
-                width_u32, height_u32, samples, mid_samples
-            );
-        }
-    }
 
     // Clean up the framebuffer object since we no longer need it.
     gles.DeleteFramebuffersOES(1, &src_framebuffer);
