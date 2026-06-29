@@ -214,6 +214,12 @@ pub const CLASSES: ClassExports = objc_classes! {
     log!("TODO: ignoring registerForRemoteNotificationTypes:{}", types);
 }
 
+// UIApplicationState: Active = 0, Inactive = 1, Background = 2. touchHLE always
+// runs the app foregrounded/active, so report Active.
+- (NSInteger)applicationState {
+    0 // UIApplicationStateActive
+}
+
 - (NSInteger)applicationIconBadgeNumber {
     0 // default value
 }
