@@ -41,13 +41,21 @@ pub const CLASSES: ClassExports = objc_classes! {
 + (id)dataFromPropertyList:(id)plist
                     format:(NSPropertyListFormat)format
                 errorDescription:(MutPtr<id>)error_string { // NSString **
-    assert_eq!(format, NSPropertyListBinaryFormat_v1_0); // TODO
     assert!(error_string.is_null()); // TODO
 
     let value = serialize_plist(env, plist);
     log_dbg!("dataFromPropertyList value {:?}", value);
     let mut buf = Vec::new();
-    value.to_writer_binary(&mut buf).unwrap();
+    // touchHLE historically only emitted binary plists; some apps (e.g. when
+    // writing a savedata.plist) request the XML format. Support both.
+    match format {
+        NSPropertyListBinaryFormat_v1_0 => value.to_writer_binary(&mut buf).unwrap(),
+        NSPropertyListXMLFormat_v1_0 => value.to_writer_xml(&mut buf).unwrap(),
+        _ => unimplemented!(
+            "NSPropertyListSerialization: unsupported output format {}",
+            format
+        ),
+    }
     let len: u32 = buf.len().try_into().unwrap();
     log_dbg!("dataFromPropertyList buf len {}", len);
     let ptr = env.mem.alloc(len);
