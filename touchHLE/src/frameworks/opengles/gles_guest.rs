@@ -846,9 +846,14 @@ fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsize
                 gles.GetFloatv(gles11::MODELVIEW_MATRIX, mv.as_mut_ptr());
                 gles.GetFloatv(gles11::PROJECTION_MATRIX, proj.as_mut_ptr());
                 gles.GetIntegerv(gles11::VIEWPORT, vp.as_mut_ptr());
+                let mut texmat = [0.0f32; 16];
+                gles.GetFloatv(0x0BA8 /* GL_TEXTURE_MATRIX */, texmat.as_mut_ptr());
+                let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
+                let mut bound = 0i32;
+                gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
                 log!(
-                    "[draw-diag] glDrawArrays #{} mode=0x{:x} first={} count={} viewport={:?} modelview={:?} projection={:?}",
-                    n, mode, first, count, vp, mv, proj
+                    "[draw-diag] glDrawArrays #{} mode=0x{:x} first={} count={} viewport={:?} tex2d={} bound_tex={} texmatrix={:?} modelview={:?} projection={:?}",
+                    n, mode, first, count, vp, tex2d, bound, texmat, mv, proj
                 );
             }
         }
