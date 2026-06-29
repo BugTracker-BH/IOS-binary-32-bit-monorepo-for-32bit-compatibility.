@@ -26,7 +26,7 @@
 use crate::abi::{self, CallFromHost, GuestFunction};
 use crate::cpu::Cpu;
 use crate::dyld::{export_c_func, FunctionExports};
-use crate::mem::{ConstVoidPtr, MutVoidPtr, Ptr};
+use crate::mem::{ConstPtr, ConstVoidPtr, MutVoidPtr, Ptr};
 use crate::{Environment, ThreadId};
 use std::collections::HashMap;
 
@@ -378,8 +378,85 @@ fn __cxa_throw(
     }
 }
 
+/// Look up the *real* (guest libstdc++) implementation of a symbol that we have
+/// also registered a host shim for. touchHLE links the app's import to our host
+/// shim (host functions take precedence over dylib exports), but the dylib's own
+/// copy is still present and callable at its exported address. `exported_symbols`
+/// values already carry the Thumb bit (`N_ARM_THUMB_DEF`), so the resulting
+/// [GuestFunction] decodes in the correct instruction set.
+fn resolve_guest_export(env: &Environment, symbol: &str) -> GuestFunction {
+    for bin in &env.bins {
+        if let Some(&addr) = bin.exported_symbols.get(symbol) {
+            return GuestFunction::from_addr_with_thumb_bit(addr);
+        }
+    }
+    panic!(
+        "touchHLE NULL-safe std::string shim: could not find real {symbol} \
+         in any loaded dylib"
+    );
+}
+
+/// NULL-tolerant `std::string::string(const char*, const allocator&)`.
+///
+/// Some apps (notably Backflip Studios titles using Boost) construct a
+/// `std::string` from a `const char*` that is NULL under touchHLE — because a
+/// stubbed/empty framework call returned nil/NULL where a real device returns a
+/// real string. libstdc++'s `_S_construct` reacts to a NULL pointer by throwing
+/// `std::logic_error("basic_string::_S_construct null not valid")`. That
+/// exception is usually *not* caught by the app (it only catches the exception
+/// it actually meant to throw, e.g. `boost::bad_lexical_cast`), so the process
+/// aborts. On a real device this never happens because the pointer is never
+/// NULL. We restore that behavior: substitute an empty string for NULL, then
+/// forward to the real libstdc++ constructor so the object is built with the
+/// genuine internal layout.
+fn string_from_cstr_nullsafe(
+    env: &mut Environment,
+    this: MutVoidPtr,
+    s: ConstPtr<u8>,
+    alloc: ConstVoidPtr,
+    symbol: &'static str,
+) {
+    let s: ConstPtr<u8> = if s.is_null() {
+        log!(
+            "Note: std::string(const char* = NULL) via {} — substituting \"\" \
+             (touchHLE NULL-safety shim) to avoid an uncatchable std::logic_error",
+            symbol
+        );
+        Ptr::from_bits(env.mem.alloc_and_write_cstr(b"").to_bits())
+    } else {
+        s
+    };
+    let real = resolve_guest_export(env, symbol);
+    // Returns `this` in r0; with R = () we leave r0 untouched after the call,
+    // so the constructor's result is preserved for the caller.
+    let _: () = real.call_from_host(env, (this, s, alloc));
+}
+
+#[allow(non_snake_case)]
+fn _ZNSsC1EPKcRKSaIcE(
+    env: &mut Environment,
+    this: MutVoidPtr,
+    s: ConstPtr<u8>,
+    alloc: ConstVoidPtr,
+) {
+    string_from_cstr_nullsafe(env, this, s, alloc, "__ZNSsC1EPKcRKSaIcE")
+}
+
+#[allow(non_snake_case)]
+fn _ZNSsC2EPKcRKSaIcE(
+    env: &mut Environment,
+    this: MutVoidPtr,
+    s: ConstPtr<u8>,
+    alloc: ConstVoidPtr,
+) {
+    string_from_cstr_nullsafe(env, this, s, alloc, "__ZNSsC2EPKcRKSaIcE")
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_throw(_, _, _)),
+    // NULL-tolerant std::string(const char*, allocator) — see above.
+    export_c_func!(_ZNSsC1EPKcRKSaIcE(_, _, _)),
+    export_c_func!(_ZNSsC2EPKcRKSaIcE(_, _, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_GetContext()),
