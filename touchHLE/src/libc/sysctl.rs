@@ -177,9 +177,11 @@ fn sysctl(
                         .get(&SysCtlNamePath::Length4(name0, name1, name2, name3))
                         .cloned()
                     else {
-                        unimplemented!(
-                            "Unknown sysctl parameter ({name0}, {name1}, {name2}, {name3})!"
-                        )
+                        log!(
+                            "Warning: unknown sysctl parameter ({}, {}, {}, {}) — returning empty",
+                            name0, name1, name2, name3
+                        );
+                        return ("", SysInfoType::Int32(0));
                     };
                     val
                 },
