@@ -39,6 +39,22 @@ pub const CLASSES: ClassExports = objc_classes! {
 - (())setLocale:(id)_locale { // NSLocale* — ignored; formatting uses system locale
 }
 
+- (())setTimeZone:(id)_tz { // NSTimeZone* — ignored; formatting uses system tz
+}
+
+- (())setDateStyle:(i32)_style { // NSDateFormatterStyle enum
+}
+
+- (())setTimeStyle:(i32)_style { // NSDateFormatterStyle enum
+}
+
+- (())setLenient:(bool)_lenient {
+}
+
+- (id)dateFromString:(id)_string { // NSString* -> NSDate* (TODO: real parse)
+    nil
+}
+
 
 - (id)stringFromDate:(id)date {
     let &NSDateFormatterHostObject {
