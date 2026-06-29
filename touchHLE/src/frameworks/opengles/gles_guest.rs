@@ -858,6 +858,17 @@ fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsize
             }
         }
         let fog_state_backup = clamp_fog_state_values(gles);
+        // PTWT supplies texcoords far outside [0,1] (e.g. U ≈ -855) that only
+        // sample correctly under GL_REPEAT wrap — the integer part is meant to be
+        // wrapped away, leaving a valid atlas sub-rect. If the bound texture is
+        // CLAMP, every such U pins to the edge and each row collapses to one
+        // texture column (the horizontal-band garble). Force REPEAT before the
+        // draw. This is a no-op for textures whose coords are already in [0,1]
+        // (e.g. JellyCar), so it can't change their appearance.
+        if gles.IsEnabled(gles11::TEXTURE_2D) != 0 {
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
+        }
         gles.DrawArrays(mode, first, count);
         restore_fog_state_values(gles, fog_state_backup);
     })
