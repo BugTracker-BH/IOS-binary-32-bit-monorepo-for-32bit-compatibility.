@@ -161,11 +161,10 @@ pub const CLASSES: ClassExports = objc_classes! {
     let str = ns_string::to_rust_string(env, string);
     log_dbg!("[(NSLocale *){:?} initWithLocaleIdentifier:'{}']", this, str);
     retain(env, string);
-    // Loosely assume 2-char lang code here
-    // TODO: locale identifier parsing
-    assert_eq!(2, str.len());
-    assert!(str.to_lowercase().eq(&str));
-    assert!(!str.contains('_') && !str.contains('-'));
+    // Store the full identifier string as the language_code for now.
+    // Real NSLocale parses components (language, country, script, variant),
+    // but for compatibility we just keep the raw identifier — most callers
+    // only need objectForKey:NSLocaleLanguageCode which extracts the prefix.
     assert!(env.objc.borrow::<NSLocaleHostObject>(this).language_code == nil);
     env.objc.borrow_mut::<NSLocaleHostObject>(this).language_code = string;
     this
