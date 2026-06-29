@@ -440,11 +440,14 @@ fn CGContextGetTextPosition(env: &mut Environment, context: CGContextRef) -> CGP
         .text_transform
         .map(|t| CGPoint { x: t.tx, y: t.ty })
         .unwrap_or(CGPoint { x: 0.0, y: 0.0 });
+    // Copy out of the packed CGPoint before formatting (can't take a reference
+    // to a field of a packed struct).
+    let (x, y) = (pos.x, pos.y);
     log_dbg!(
         "[diag] CGContextGetTextPosition({:?}) -> ({}, {})",
         context,
-        pos.x,
-        pos.y
+        x,
+        y
     );
     pos
 }
