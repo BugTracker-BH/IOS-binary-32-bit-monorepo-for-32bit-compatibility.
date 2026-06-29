@@ -195,7 +195,10 @@ fn deserialize_plist(
         }
         Value::Date(date_val) => {
             let time: SystemTime = (*date_val).into();
-            let time_interval = time.duration_since(apple_epoch()).unwrap().as_secs_f64();
+            let time_interval = match time.duration_since(apple_epoch()) {
+                Ok(d) => d.as_secs_f64(),
+                Err(e) => -(e.duration().as_secs_f64()), // before epoch → negative
+            };
             let date: id = msg_class![env; NSDate alloc];
             msg![env; date initWithTimeIntervalSinceReferenceDate:time_interval]
         }
