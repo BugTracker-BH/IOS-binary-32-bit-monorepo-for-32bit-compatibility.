@@ -516,6 +516,27 @@ fn sqlite3_exec(
     real.call_from_host(env, (db, sql, callback, arg, errmsg))
 }
 
+/// Shim for `std::string::reserve(size_t)`. JellyCar 3's `SoundManager::playMusic`
+/// reads a `std::string` from an object that was never initialized (FMOD failed →
+/// the music system is in a broken state), producing a garbage length value that
+/// causes `_S_create` to throw `length_error`. We intercept `reserve`: if the
+/// requested capacity is absurdly large (> 256MB — no real string needs that), we
+/// silently clamp it to 0 (the string stays empty) instead of letting the real
+/// `reserve` throw. This keeps the app alive through the failed-audio path.
+#[allow(non_snake_case)]
+fn _ZNSs7reserveEm(env: &mut Environment, this: MutVoidPtr, n: u32) {
+    if n > 256 * 1024 * 1024 {
+        log!(
+            "Note: std::string::reserve({:#x}) clamped to 0 — likely a corrupted \
+             string from uninitialized FMOD/sound state (touchHLE reserve shim)",
+            n
+        );
+        return; // Don't forward — just leave the string as-is (empty/short).
+    }
+    let real = resolve_guest_export(env, "__ZNSs7reserveEm");
+    let _: () = real.call_from_host(env, (this, n));
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__cxa_throw(_, _, _)),
     // NULL-tolerant std::string(const char*, allocator) — see above.
@@ -525,6 +546,8 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(sqlite3_prepare_v2(_, _, _, _, _)),
     export_c_func!(sqlite3_prepare(_, _, _, _, _)),
     export_c_func!(sqlite3_exec(_, _, _, _, _)),
+    // Catches absurd std::string::reserve from corrupted FMOD/sound state.
+    export_c_func!(_ZNSs7reserveEm(_, _)),
     export_c_func!(_Unwind_SjLj_Register(_)),
     export_c_func!(_Unwind_SjLj_Unregister(_)),
     export_c_func!(_Unwind_SjLj_GetContext()),
