@@ -756,6 +756,35 @@ thread_local! {
         std::cell::Cell::new((0, 0, 0));
 }
 
+/// If the most recently set texcoord client array (treated as a quad's first 4
+/// vertices) has a minimum coordinate far outside [0,1] — a large atlas offset
+/// as some engines emit (PTWT uses U ≈ -961, whose fractional part otherwise
+/// makes GL_REPEAT wrap the quad across the texture edge into blank padding) —
+/// return the texture-matrix translation that brings the quad's min corner to
+/// the texture origin (where the real content sits). In-range coordinates (e.g.
+/// JellyCar's) return (0.0, 0.0) and are therefore left completely untouched.
+fn atlas_texcoord_offset(mem: &crate::mem::Mem) -> (f32, f32) {
+    let (tcptr, tcsize, tcstride) = LAST_TEXCOORD_PTR.with(|c| c.get());
+    if tcptr <= 0x1000 || tcsize < 2 {
+        return (0.0, 0.0);
+    }
+    let step: u32 = if tcstride == 0 { tcsize as u32 } else { (tcstride / 4) as u32 };
+    let (mut min_u, mut min_v) = (f32::INFINITY, f32::INFINITY);
+    for v in 0..4u32 {
+        let u: f32 = mem.read(crate::mem::Ptr::<f32, false>::from_bits(tcptr + (v * step) * 4));
+        let w: f32 = mem.read(crate::mem::Ptr::<f32, false>::from_bits(tcptr + (v * step + 1) * 4));
+        if u < min_u {
+            min_u = u;
+        }
+        if w < min_v {
+            min_v = w;
+        }
+    }
+    let tx = if min_u.is_finite() && min_u < -2.0 { -min_u } else { 0.0 };
+    let ty = if min_v.is_finite() && min_v < -2.0 { -min_v } else { 0.0 };
+    (tx, ty)
+}
+
 fn glTexCoordPointer(
     env: &mut Environment,
     size: GLint,
@@ -840,60 +869,32 @@ fn glVertexPointer(
 // Drawing
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        {
-            // Target VISIBLE photo/sprite draws: non-degenerate modelview scale and
-            // a higher texture id (the menu's pinned photos). Frame-1 captures
-            // missed these because they were issued at zero scale. Read the
-            // texcoords actually in effect (tracked at glTexCoordPointer time).
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static N: AtomicU32 = AtomicU32::new(0);
-            let mut mv = [0.0f32; 16];
-            gles.GetFloatv(gles11::MODELVIEW_MATRIX, mv.as_mut_ptr());
-            let mut bound = 0i32;
-            gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
-            let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
-            let scale_x = mv[0].abs();
-            let scale_y = mv[5].abs();
-            if tex2d && bound >= 5 && scale_x > 1.0 && scale_y > 1.0 {
-                let n = N.fetch_add(1, Ordering::Relaxed);
-                if n < 40 {
-                    let (tcptr, tcsize, tcstride) = LAST_TEXCOORD_PTR.with(|c| c.get());
-                    let mut tc = Vec::new();
-                    if tcptr > 0x1000 && tcsize > 0 {
-                        let step = if tcstride == 0 { tcsize as u32 } else { (tcstride / 4) as u32 };
-                        for v in 0..4u32 {
-                            let mut comps = Vec::new();
-                            for c in 0..(tcsize as u32) {
-                                comps.push(
-                                    mem.read(crate::mem::Ptr::<f32, false>::from_bits(
-                                        tcptr + (v * step + c) * 4,
-                                    )),
-                                );
-                            }
-                            tc.push(comps);
-                        }
-                    }
-                    log!(
-                        "[thumb-diag] #{} tex={} scale={:.1}x{:.1} pos=({:.0},{:.0}) off_diag=[{:.3},{:.3}] texcoord={:?}",
-                        n, bound, scale_x, scale_y, mv[12], mv[13], mv[1], mv[4], tc
-                    );
-                }
-            }
+        let (tx, ty) = atlas_texcoord_offset(mem);
+        let adjust = tx != 0.0 || ty != 0.0;
+        let mut prev_mode: GLint = 0;
+        if adjust {
+            gles.GetIntegerv(gles11::MATRIX_MODE, &mut prev_mode);
+            gles.MatrixMode(gles11::TEXTURE);
+            gles.LoadIdentity();
+            gles.Translatef(tx, ty, 0.0);
+            gles.MatrixMode(prev_mode as GLenum);
         }
-        let fog_state_backup = clamp_fog_state_values(gles);
-        // PTWT supplies texcoords far outside [0,1] (e.g. U ≈ -855) that only
-        // sample correctly under GL_REPEAT wrap — the integer part is meant to be
-        // wrapped away, leaving a valid atlas sub-rect. If the bound texture is
-        // CLAMP, every such U pins to the edge and each row collapses to one
-        // texture column (the horizontal-band garble). Force REPEAT before the
-        // draw. This is a no-op for textures whose coords are already in [0,1]
-        // (e.g. JellyCar), so it can't change their appearance.
+        // PTWT-style atlas texcoords sit far outside [0,1] (e.g. U ≈ -961); force
+        // GL_REPEAT so the integer part wraps away. (No-op for in-[0,1] coords like
+        // JellyCar.) Combined with the texture-matrix origin alignment above, the
+        // quad samples its real content instead of wrapping into blank padding.
         if gles.IsEnabled(gles11::TEXTURE_2D) != 0 {
             gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
             gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
         }
+        let fog_state_backup = clamp_fog_state_values(gles);
         gles.DrawArrays(mode, first, count);
         restore_fog_state_values(gles, fog_state_backup);
+        if adjust {
+            gles.MatrixMode(gles11::TEXTURE);
+            gles.LoadIdentity();
+            gles.MatrixMode(prev_mode as GLenum);
+        }
     })
 }
 fn glDrawElements(
@@ -904,39 +905,23 @@ fn glDrawElements(
     indices: ConstVoidPtr,
 ) {
     with_ctx_and_mem(env, |gles, mem| unsafe {
-        // DIAGNOSTIC (temporary): for the first textured draws, dump the live
-        // colour/array/texenv state, to find why JellyCar renders white on iOS.
-        {
-            use std::sync::atomic::{AtomicU32, Ordering};
-            static N: AtomicU32 = AtomicU32::new(0);
-            let tex2d = gles.IsEnabled(gles11::TEXTURE_2D) != 0;
-            if tex2d {
-                let n = N.fetch_add(1, Ordering::Relaxed);
-                if n < 30 {
-                    let mut col = [0.0f32; 4];
-                    gles.GetFloatv(gles11::CURRENT_COLOR, col.as_mut_ptr());
-                    let color_arr = gles.IsEnabled(0x8076 as GLenum) != 0; // GL_COLOR_ARRAY
-                    let tc_arr = gles.IsEnabled(gles11::TEXTURE_COORD_ARRAY) != 0;
-                    let mut bound: GLint = 0;
-                    gles.GetIntegerv(gles11::TEXTURE_BINDING_2D, &mut bound);
-                    let mut envm: GLint = 0;
-                    gles.GetTexEnviv(gles11::TEXTURE_ENV, gles11::TEXTURE_ENV_MODE, &mut envm);
-                    log!(
-                        "[diag-draw] #{} count={} color=[{:.2},{:.2},{:.2},{:.2}] colorArr={} texcoordArr={} env=0x{:x} boundTex={}",
-                        n, count, col[0], col[1], col[2], col[3], color_arr, tc_arr, envm, bound
-                    );
-                }
-            }
+        let (tx, ty) = atlas_texcoord_offset(mem);
+        let adjust = tx != 0.0 || ty != 0.0;
+        let mut prev_mode: GLint = 0;
+        if adjust {
+            gles.GetIntegerv(gles11::MATRIX_MODE, &mut prev_mode);
+            gles.MatrixMode(gles11::TEXTURE);
+            gles.LoadIdentity();
+            gles.Translatef(tx, ty, 0.0);
+            gles.MatrixMode(prev_mode as GLenum);
         }
-        let fog_state_backup = clamp_fog_state_values(gles);
-        // Same out-of-[0,1]-texcoord REPEAT fix as glDrawArrays (see there): force
-        // GL_REPEAT so atlas coordinates with large integer parts wrap correctly
-        // instead of clamping to the edge (which smears the sprite into bands).
-        // No-op for in-[0,1] coords, so JellyCar is unaffected.
+        // Same atlas-offset fix as glDrawArrays (see there): force GL_REPEAT and,
+        // for far-out-of-range coords, align the quad to the texture origin.
         if gles.IsEnabled(gles11::TEXTURE_2D) != 0 {
             gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
             gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
         }
+        let fog_state_backup = clamp_fog_state_values(gles);
         let indices = translate_pointer_or_offset_to_host(
             gles,
             mem,
@@ -945,6 +930,11 @@ fn glDrawElements(
         );
         gles.DrawElements(mode, count, type_, indices);
         restore_fog_state_values(gles, fog_state_backup);
+        if adjust {
+            gles.MatrixMode(gles11::TEXTURE);
+            gles.LoadIdentity();
+            gles.MatrixMode(prev_mode as GLenum);
+        }
     })
 }
 
