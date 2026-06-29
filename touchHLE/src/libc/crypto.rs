@@ -78,6 +78,28 @@ fn CC_SHA256_Final(env: &mut Environment, md: MutPtr<u8>, c: MutVoidPtr) -> i32 
     1
 }
 
+// Security.framework Keychain stubs. The app uses these to store/retrieve
+// credentials. We return "not found" so the app takes its "no saved data"
+// fallback path instead of crashing when it dereferences a null result pointer.
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
+
+/// `OSStatus SecItemCopyMatching(CFDictionaryRef query, CFTypeRef *result)`
+fn SecItemCopyMatching(_env: &mut Environment, _query: MutVoidPtr, _result: MutVoidPtr) -> i32 {
+    ERR_SEC_ITEM_NOT_FOUND
+}
+/// `OSStatus SecItemAdd(CFDictionaryRef attributes, CFTypeRef *result)`
+fn SecItemAdd(_env: &mut Environment, _attributes: MutVoidPtr, _result: MutVoidPtr) -> i32 {
+    0 // errSecSuccess — pretend the add succeeded
+}
+/// `OSStatus SecItemUpdate(CFDictionaryRef query, CFDictionaryRef attributesToUpdate)`
+fn SecItemUpdate(_env: &mut Environment, _query: MutVoidPtr, _attrs: MutVoidPtr) -> i32 {
+    0 // errSecSuccess
+}
+/// `OSStatus SecItemDelete(CFDictionaryRef query)`
+fn SecItemDelete(_env: &mut Environment, _query: MutVoidPtr) -> i32 {
+    0 // errSecSuccess
+}
+
 pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_MD5(_, _, _)),
     export_c_func!(CC_SHA1(_, _, _)),
@@ -85,6 +107,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(CC_SHA256_Init(_)),
     export_c_func!(CC_SHA256_Update(_, _, _)),
     export_c_func!(CC_SHA256_Final(_, _)),
+    export_c_func!(SecItemCopyMatching(_, _)),
+    export_c_func!(SecItemAdd(_, _)),
+    export_c_func!(SecItemUpdate(_, _)),
+    export_c_func!(SecItemDelete(_)),
     export_c_func!(CCCrypt(_, _, _, _, _, _, _, _, _, _, _)),
 ];
 
