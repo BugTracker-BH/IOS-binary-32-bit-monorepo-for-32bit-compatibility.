@@ -105,7 +105,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 + (())sleepForTimeInterval:(NSTimeInterval)ti {
     log_dbg!("[NSThread sleepForTimeInterval:{:?}]", ti);
-    env.sleep(Duration::from_secs_f64(ti));
+    env.sleep(Duration::from_secs_f64(ti.max(0.0)));
 }
 + (())sleepUntilDate:(id)date { // NSDate *
     let ti: NSTimeInterval = msg![env; date timeIntervalSinceNow];

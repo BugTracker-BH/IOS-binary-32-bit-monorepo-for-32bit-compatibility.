@@ -117,12 +117,12 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         if advance_by > 1 {
             log_dbg!("Warning: compositor is lagging. It is overdue by {}s and has missed {} interval(s)!", overdue_by.as_secs_f64(), advance_by - 1);
         }
-        let advance_by = Duration::from_secs_f64(interval)
+        let advance_by = Duration::from_secs_f64(interval.max(0.0001))
             .checked_mul(advance_by)
             .unwrap();
         Some(recomposite_next.checked_add(advance_by).unwrap())
     } else {
-        Some(now.checked_add(Duration::from_secs_f64(interval)).unwrap())
+        Some(now.checked_add(Duration::from_secs_f64(interval.max(0.0001))).unwrap())
     };
     env.framework_state
         .core_animation

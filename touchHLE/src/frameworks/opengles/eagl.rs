@@ -388,7 +388,7 @@ fn limit_framerate(next_frame_due: &mut Option<Instant>, options: &Options) -> O
     } else {
         return None;
     };
-    let interval_rust = Duration::from_secs_f64(interval);
+    let interval_rust = Duration::from_secs_f64(interval.max(0.0001));
 
     let &mut Some(current_frame_due) = next_frame_due else {
         // First frame presented: no delay yet.

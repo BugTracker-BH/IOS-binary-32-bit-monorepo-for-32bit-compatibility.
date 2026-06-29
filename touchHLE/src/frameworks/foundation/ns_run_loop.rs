@@ -232,7 +232,7 @@ pub(super) fn add_perform_request(
     } = &mut env.objc.borrow_mut::<NSRunLoopHostObject>(run_loop);
     let due_by = delay.map(|dur| {
         Instant::now()
-            .checked_add(Duration::from_secs_f64(dur))
+            .checked_add(Duration::from_secs_f64(dur.max(0.0)))
             .unwrap()
     });
     selector_objects.push_back(ObjectSelectorSource {
