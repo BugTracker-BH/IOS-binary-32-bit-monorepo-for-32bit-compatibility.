@@ -303,6 +303,29 @@ forUndefinedKey:(id)key { // NSString*
     detach_new_thread_inner(env, sel, this, arg, /* tolerate_type_mismatch: */ true)
 }
 
+- (())performSelector:(SEL)sel
+             onThread:(id)_thread
+           withObject:(id)arg
+        waitUntilDone:(bool)_wait {
+    // touchHLE does not model dispatching to an arbitrary target thread, so
+    // perform the selector synchronously on the current thread. This is enough
+    // for the networking / crash-reporter bridges (e.g. HockeySDK's __HttpBridge)
+    // that use this method.
+    log_dbg!(
+        "performSelector:{} onThread:{:?} withObject:{:?} waitUntilDone:{} (performed synchronously)",
+        sel.as_str(&env.mem),
+        _thread,
+        arg,
+        _wait
+    );
+    assert!(!sel.is_null());
+    if sel.as_str(&env.mem).ends_with(':') {
+        () = msg_send(env, (this, sel, arg));
+    } else {
+        () = msg_send(env, (this, sel));
+    }
+}
+
 - (())performSelector:(SEL)sel withObject:(id)arg afterDelay:(NSTimeInterval)delay {
     let run_loop: id = msg_class![env; NSRunLoop currentRunLoop];
     add_perform_request(env, run_loop, this, sel, arg, Some(delay), false);
