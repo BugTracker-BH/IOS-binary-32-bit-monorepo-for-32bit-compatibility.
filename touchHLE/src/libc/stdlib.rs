@@ -610,6 +610,37 @@ fn __moddi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
     }
 }
 
+// libgcc soft-float conversion helpers. `__fixunsdfdi` converts a `double` to
+// `unsigned long long`. On ARM soft-float ABI the double is passed in r0:r1
+// (as a u64 bitpattern), and the result is returned in r0:r1 (as u64). Since
+// touchHLE's GuestArg for f64 reads from r0:r1 as bits and GuestRet for u64
+// writes to r0:r1, using f64→u64 directly with the Rust `as` cast works.
+fn __fixunsdfdi(_env: &mut Environment, val: f64) -> u64 {
+    if val.is_nan() || val <= 0.0 {
+        0
+    } else if val >= u64::MAX as f64 {
+        u64::MAX
+    } else {
+        val as u64
+    }
+}
+
+fn __fixdfdi(_env: &mut Environment, val: f64) -> i64 {
+    if val.is_nan() {
+        0
+    } else {
+        val as i64
+    }
+}
+
+fn __floatdidf(_env: &mut Environment, val: i64) -> f64 {
+    val as f64
+}
+
+fn __floatundidf(_env: &mut Environment, val: u64) -> f64 {
+    val as f64
+}
+
 /// `void dispatch_once(dispatch_once_t *predicate, dispatch_block_t block)`.
 ///
 /// GCD's run-once primitive. On a real device this is thread-safe (compare-and-
@@ -782,6 +813,10 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__umoddi3(_, _)),
     export_c_func!(__divdi3(_, _)),
     export_c_func!(__moddi3(_, _)),
+    export_c_func!(__fixunsdfdi(_)),
+    export_c_func!(__fixdfdi(_)),
+    export_c_func!(__floatdidf(_)),
+    export_c_func!(__floatundidf(_)),
     export_c_func!(dispatch_once(_, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
