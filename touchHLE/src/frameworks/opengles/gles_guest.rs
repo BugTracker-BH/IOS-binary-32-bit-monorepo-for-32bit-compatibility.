@@ -765,6 +765,23 @@ fn glTexCoordPointer(
                 "[diag-ptr] glTexCoordPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
                 size, type_, stride, pointer.to_bits()
             );
+            // Dump the first 4 vertices' texcoords from guest memory (client array,
+            // FLOAT only). If U (first component) is constant while V varies, the
+            // horizontal smear is a client-texcoord-array read bug.
+            if type_ == 0x1406 && pointer.to_bits() > 0x1000 {
+                let step: u32 = if stride == 0 { size as u32 } else { (stride / 4) as u32 };
+                let base = pointer.to_bits();
+                let mut verts = Vec::new();
+                for v in 0..4u32 {
+                    let mut comps = Vec::new();
+                    for c in 0..(size as u32) {
+                        let p = crate::mem::Ptr::<f32, false>::from_bits(base + (v * step + c) * 4);
+                        comps.push(env.mem.read(p));
+                    }
+                    verts.push(comps);
+                }
+                log!("[diag-data] texcoord first4={:?}", verts);
+            }
         }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
@@ -789,6 +806,20 @@ fn glVertexPointer(
                 "[diag-ptr] glVertexPointer(size={}, type=0x{:x}, stride={}, ptr=0x{:x})",
                 size, type_, stride, pointer.to_bits()
             );
+            if type_ == 0x1406 && pointer.to_bits() > 0x1000 {
+                let step: u32 = if stride == 0 { size as u32 } else { (stride / 4) as u32 };
+                let base = pointer.to_bits();
+                let mut verts = Vec::new();
+                for v in 0..4u32 {
+                    let mut comps = Vec::new();
+                    for c in 0..(size as u32) {
+                        let p = crate::mem::Ptr::<f32, false>::from_bits(base + (v * step + c) * 4);
+                        comps.push(env.mem.read(p));
+                    }
+                    verts.push(comps);
+                }
+                log!("[diag-data] vertex first4={:?}", verts);
+            }
         }
     }
     with_ctx_and_mem(env, |gles, mem| unsafe {
