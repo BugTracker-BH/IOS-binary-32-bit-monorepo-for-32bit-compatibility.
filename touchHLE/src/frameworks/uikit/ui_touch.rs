@@ -258,6 +258,13 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         }
 
         let is_multi_touch_enabled: bool = msg![env; view isMultipleTouchEnabled];
+        log!(
+            "[nav-touch] touch-down at {:?} -> view={:?} (current_touches={}, multitouch={})",
+            location,
+            view,
+            env.framework_state.uikit.ui_touch.current_touches.len(),
+            is_multi_touch_enabled
+        );
         if !is_multi_touch_enabled {
             // When a view has multi-touch disabled, it can only have one active
             // touch at once. So, we can only report a new touch to the view if
@@ -451,6 +458,11 @@ fn handle_touches_up(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         };
 
         let view = env.objc.borrow::<UITouchHostObject>(touch).view;
+        log!(
+            "[nav-touch] touch-up finger {:?} -> delivering touchesEnded to view={:?}",
+            finger_id,
+            view
+        );
         let host_object = env.objc.borrow_mut::<UITouchHostObject>(touch);
         host_object.previous_location = host_object.location;
         host_object.location = location;
