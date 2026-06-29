@@ -399,6 +399,23 @@ pub(super) fn UIApplicationMain(
         let _: () = msg![env; pool drain];
     }
 
+    // Some apps (e.g. JellyCar 3) set up their CADisplayLink / animation timer
+    // in response to applicationDidBecomeActive:, but at the point above the
+    // view controller may not exist yet (it gets created during the first
+    // run-loop cycle from nib loading). Re-deliver the delegate call after a
+    // minimal delay so the VC is ready. Receiving it twice is harmless — apps
+    // already handle repeated active transitions (background → foreground).
+    // We use performSelector:withObject:afterDelay: which queues on the run loop.
+    {
+        let pool: id = msg_class![env; NSAutoreleasePool new];
+        let delegate: id = msg![env; ui_application delegate];
+        if env.objc.object_has_method_named(&env.mem, delegate, "applicationDidBecomeActive:") {
+            let sel = env.objc.lookup_selector("applicationDidBecomeActive:").unwrap();
+            () = msg![env; delegate performSelector:sel withObject:ui_application afterDelay:0.0_f64];
+        }
+        let _: () = msg![env; pool drain];
+    }
+
     // FIXME: There are more messages we should send.
 
     // TODO: It might be nicer to return from this function (even though it's
