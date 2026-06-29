@@ -153,7 +153,10 @@ pub const CLASSES: ClassExports = objc_classes! {
 }
 
 - (bool)fileExistsAtPath:(id)path { // NSString*
-    let res_exists = if path == nil {
+    let res_exists = if path == nil || env.objc.get_host_object(path).is_none() {
+        // nil, or a garbage/untracked pointer (e.g. a bad path computed by
+        // HockeySDK from faked data): treat as "does not exist" rather than
+        // borrowing an unregistered object and panicking.
         false
     } else {
         let path = ns_string::to_rust_string(env, path); // TODO: avoid copy
@@ -167,7 +170,7 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (bool)fileExistsAtPath:(id)path // NSString*
              isDirectory:(MutPtr<bool>)is_dir {
-    let (res_exists, res_is_dir) = if path == nil {
+    let (res_exists, res_is_dir) = if path == nil || env.objc.get_host_object(path).is_none() {
         (false, false)
     } else {
         // TODO: mutualize with fileExistsAtPath:
