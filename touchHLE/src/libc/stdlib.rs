@@ -610,6 +610,29 @@ fn __moddi3(_env: &mut Environment, a: u64, b: u64) -> i64 {
     }
 }
 
+/// `void dispatch_once(dispatch_once_t *predicate, dispatch_block_t block)`.
+///
+/// GCD's run-once primitive. On a real device this is thread-safe (compare-and-
+/// swap + barrier); here we can rely on touchHLE's coroutine model (guest code
+/// doesn't truly preempt) and just check-and-set. The block ABI is: `block` is
+/// a pointer to a struct whose invoke function pointer is at offset 12 (armv7),
+/// called with the block pointer as the first argument.
+fn dispatch_once(env: &mut Environment, predicate: MutPtr<u32>, block: MutVoidPtr) {
+    let pred_val: u32 = env.mem.read(predicate);
+    if pred_val != 0 {
+        return; // already executed
+    }
+    // Mark as done BEFORE invoking (prevents re-entrancy from triggering again).
+    env.mem.write(predicate, 1u32);
+    // Invoke the block: block->invoke is at byte offset 12.
+    let invoke_ptr: u32 = env.mem.read(Ptr::<u32, false>::from_bits(block.to_bits() + 12));
+    if invoke_ptr != 0 {
+        let f = GuestFunction::from_addr_with_thumb_bit(invoke_ptr);
+        log_dbg!("dispatch_once: invoking block {:?} via invoke={:#x}", block, invoke_ptr);
+        let _: () = f.call_from_host(env, (block,));
+    }
+}
+
 fn strtol(env: &mut Environment, str: ConstPtr<u8>, endptr: MutPtr<MutPtr<u8>>, base: i32) -> i32 {
     // TODO: handle errno properly
     set_errno(env, 0);
@@ -759,6 +782,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(__umoddi3(_, _)),
     export_c_func!(__divdi3(_, _)),
     export_c_func!(__moddi3(_, _)),
+    export_c_func!(dispatch_once(_, _)),
     export_c_func!(strtol(_, _, _)),
     export_c_func!(realpath(_, _)),
     export_c_func_aliased!("realpath$DARWIN_EXTSN", realpath(_, _)),
