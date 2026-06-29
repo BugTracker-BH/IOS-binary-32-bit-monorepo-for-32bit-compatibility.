@@ -906,6 +906,14 @@ fn glDrawElements(
             }
         }
         let fog_state_backup = clamp_fog_state_values(gles);
+        // Same out-of-[0,1]-texcoord REPEAT fix as glDrawArrays (see there): force
+        // GL_REPEAT so atlas coordinates with large integer parts wrap correctly
+        // instead of clamping to the edge (which smears the sprite into bands).
+        // No-op for in-[0,1] coords, so JellyCar is unaffected.
+        if gles.IsEnabled(gles11::TEXTURE_2D) != 0 {
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_S, gles11::REPEAT as _);
+            gles.TexParameteri(gles11::TEXTURE_2D, gles11::TEXTURE_WRAP_T, gles11::REPEAT as _);
+        }
         let indices = translate_pointer_or_offset_to_host(
             gles,
             mem,
