@@ -220,7 +220,8 @@ fn sysctlbyname(
         |env| {
             let name_str = env.mem.cstr_at_utf8(name).unwrap();
             let Some((name_str, val)) = STRING_MAP.get_key_value(name_str) else {
-                unimplemented!("Unknown sysctlbyname parameter {name_str}!")
+                log!("Warning: unknown sysctlbyname parameter {:?} — returning empty", name_str);
+                return ("", SysInfoType::Int32(0));
             };
             (name_str, val.clone())
         },
