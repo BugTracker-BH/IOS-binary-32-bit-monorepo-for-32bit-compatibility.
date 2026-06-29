@@ -268,6 +268,14 @@ fn _Unwind_SjLj_Resume(env: &mut Environment, exc: MutVoidPtr) {
     // If it returns, there's no further handler; nothing safe to do.
 }
 
+/// `_Unwind_SjLj_Resume_or_Rethrow` — called by libstdc++ when a catch block
+/// decides to re-throw (or during forced unwind). Semantically equivalent to
+/// RaiseException for our purposes.
+fn _Unwind_SjLj_Resume_or_Rethrow(env: &mut Environment, exc: MutVoidPtr) -> i32 {
+    log!("[eh-sjlj] Resume_or_Rethrow(exc={:#x})", exc.to_bits());
+    _Unwind_SjLj_RaiseException(env, exc)
+}
+
 fn _Unwind_SjLj_ForcedUnwind(
     _env: &mut Environment,
     exc: MutVoidPtr,
@@ -329,6 +337,7 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(_Unwind_SjLj_SetContext(_)),
     export_c_func!(_Unwind_SjLj_RaiseException(_)),
     export_c_func!(_Unwind_SjLj_Resume(_)),
+    export_c_func!(_Unwind_SjLj_Resume_or_Rethrow(_)),
     export_c_func!(_Unwind_SjLj_ForcedUnwind(_, _, _)),
     export_c_func!(_Unwind_GetLanguageSpecificData(_)),
     export_c_func!(_Unwind_GetIP(_)),
