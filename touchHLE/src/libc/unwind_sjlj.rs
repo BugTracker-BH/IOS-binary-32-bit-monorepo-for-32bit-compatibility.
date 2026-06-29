@@ -333,7 +333,7 @@ fn __cxa_throw(
             let name_ptr = r32(env, tinfo.to_bits() + 4);
             if name_ptr != 0 {
                 env.mem
-                    .cstr_at_utf8(Ptr::from_bits(name_ptr))
+                    .cstr_at_utf8(Ptr::<u8, false>::from_bits(name_ptr))
                     .map(|s| s.to_owned())
                     .unwrap_or_else(|_| "<unreadable>".to_string())
             } else {
