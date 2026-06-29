@@ -309,7 +309,7 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
         Value::Data(buffer_slice.to_vec())
     } else if class == env.objc.get_known_class("NSDate", &mut env.mem) {
         let date = env.objc.borrow::<NSDateHostObject>(plist);
-        let time = if date.time_interval >= 0.0 { apple_epoch().add(Duration::from_secs_f64(date.time_interval)) } else { apple_epoch().sub(Duration::from_secs_f64(-date.time_interval)) };
+        let time = if date.time_interval >= 0.0 { apple_epoch().add(Duration::from_secs_f64(date.time_interval)) } else { apple_epoch() - Duration::from_secs_f64(-date.time_interval) };
         Value::Date(time.into())
     } else {
         unimplemented!("class {}", env.objc.get_class_name(class))
