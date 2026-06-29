@@ -471,8 +471,20 @@ fn sqlite3_prepare_v2(
             .mem
             .cstr_at_utf8(zSql)
             .map(|s| s.to_owned())
-            .unwrap_or_else(|_| "<non-utf8>".to_string());
-        log!("[sqlite-diag] prepare_v2: {:?}", sql);
+            .unwrap_or_else(|_| String::new());
+        // JellyCar 3 uses "Column" as a column name in MainMenuInfo, but
+        // touchHLE's bundled SQLite 3.6.10 rejects it as a keyword unless
+        // quoted. Rewrite unquoted `Column=` → `"Column"=` so the query parses.
+        if sql.contains("Column=") || sql.contains("Column =") {
+            let fixed = sql.replace("Column=", "\"Column\"=").replace("Column =", "\"Column\" =");
+            log!("[sqlite-fix] rewrote: {:?}", fixed);
+            let buf = env.mem.alloc_and_write_cstr(fixed.as_bytes());
+            let real = resolve_guest_export(env, "_sqlite3_prepare_v2");
+            let result: i32 =
+                real.call_from_host(env, (db, buf, -1i32, ppStmt, pzTail));
+            env.mem.free(buf.cast());
+            return result;
+        }
     }
     let real = resolve_guest_export(env, "_sqlite3_prepare_v2");
     real.call_from_host(env, (db, zSql, nByte, ppStmt, pzTail))
@@ -487,14 +499,6 @@ fn sqlite3_prepare(
     ppStmt: MutVoidPtr,
     pzTail: MutVoidPtr,
 ) -> i32 {
-    if !zSql.is_null() {
-        let sql = env
-            .mem
-            .cstr_at_utf8(zSql)
-            .map(|s| s.to_owned())
-            .unwrap_or_else(|_| "<non-utf8>".to_string());
-        log!("[sqlite-diag] prepare: {:?}", sql);
-    }
     let real = resolve_guest_export(env, "_sqlite3_prepare");
     real.call_from_host(env, (db, zSql, nByte, ppStmt, pzTail))
 }
@@ -508,14 +512,6 @@ fn sqlite3_exec(
     arg: MutVoidPtr,
     errmsg: MutVoidPtr,
 ) -> i32 {
-    if !sql.is_null() {
-        let s = env
-            .mem
-            .cstr_at_utf8(sql)
-            .map(|s| s.to_owned())
-            .unwrap_or_else(|_| "<non-utf8>".to_string());
-        log!("[sqlite-diag] exec: {:?}", s);
-    }
     let real = resolve_guest_export(env, "_sqlite3_exec");
     real.call_from_host(env, (db, sql, callback, arg, errmsg))
 }
