@@ -217,6 +217,15 @@ pub const CLASSES: ClassExports = objc_classes! {
     release(env, notification);
 }
 
+- (id)addObserverForName:(id)_name // NSNotificationName (NSString*)
+                  object:(id)_obj
+                   queue:(id)_queue // NSOperationQueue* (ignored)
+              usingBlock:(id)_block { // block — not invoked (TODO: block support)
+    // Returns an opaque observer token. We return nil since we can't invoke
+    // the block; the app should handle a nil token gracefully.
+    nil
+}
+
 @end
 
 };
