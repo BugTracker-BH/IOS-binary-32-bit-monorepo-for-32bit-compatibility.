@@ -318,7 +318,11 @@ fn serialize_plist(env: &mut Environment, plist: id) -> Value {
             NSNumberHostObject::Char(c) => Value::from(*c),
             _ => todo!("num {:?}", num),
         }
-    } else if class == env.objc.get_known_class("NSData", &mut env.mem) {
+    } else if {
+        let nsdata_class = env.objc.get_known_class("NSData", &mut env.mem);
+        env.objc.class_is_subclass_of(class, nsdata_class)
+    } {
+        // NSData or any subclass (e.g. NSMutableData), which share NSDataHostObject.
         let data = env.objc.borrow::<NSDataHostObject>(plist);
         let buffer_slice = env.mem.bytes_at(data.bytes.cast(), data.length);
         Value::Data(buffer_slice.to_vec())
