@@ -223,8 +223,24 @@ fn _Unwind_SjLj_RaiseException(env: &mut Environment, exc: MutVoidPtr) -> i32 {
         }
         let personality = r32(env, fc + FC_PERSONALITY);
         if personality != 0 {
+            // Diagnostics: a frame inside a live try-region should have a small
+            // non-negative call_site index and a non-null LSDA. If call_site is
+            // garbage / -1 (0xffffffff) or lsda is 0 for the frames that ought to
+            // catch, the unwinder/ABI is wrong. If they look sane yet the
+            // personality still says CONTINUE_UNWIND, the app genuinely has no
+            // matching catch on this path (the throw is fatal even on-device-
+            // equivalent input).
+            let call_site = r32(env, fc + FC_CALL_SITE);
+            let lsda = r32(env, fc + FC_LSDA);
             let code = call_personality(env, personality, _UA_SEARCH_PHASE, exc, fc);
-            log!("[eh-sjlj] phase1 fc={:#x} personality={:#x} -> {}", fc, personality, code);
+            log!(
+                "[eh-sjlj] phase1 fc={:#x} personality={:#x} call_site={} lsda={:#x} -> {}",
+                fc,
+                personality,
+                call_site as i32,
+                lsda,
+                code
+            );
             if code == _URC_HANDLER_FOUND {
                 break fc;
             } else if code != _URC_CONTINUE_UNWIND {
