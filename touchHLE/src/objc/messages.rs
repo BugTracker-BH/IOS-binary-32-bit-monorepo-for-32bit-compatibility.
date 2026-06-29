@@ -65,7 +65,13 @@ pub(super) struct ThreadInitializer {
 }
 
 fn maybe_initialize_class(env: &mut Environment, receiver: id) {
-    let class_host_object = env.objc.get_host_object(receiver).unwrap();
+    // The receiver may be an untracked pointer — e.g. a bogus/garbage value left
+    // behind by an unimplemented stub, or a fake/unimplemented class. If we have
+    // no host object for it, there is nothing to send +initialize to, so bail
+    // out leniently rather than panicking (mirrors the fake-class case below).
+    let Some(class_host_object) = env.objc.get_host_object(receiver) else {
+        return;
+    };
     let Some(&super::ClassHostObject {
         superclass,
         is_metaclass,
