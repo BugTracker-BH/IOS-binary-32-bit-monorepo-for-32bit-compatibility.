@@ -257,7 +257,19 @@ fn objc_msgSend_inner(
     }
 
     let orig_class = super2.unwrap_or_else(|| ObjC::read_isa(receiver, &env.mem));
-    assert!(orig_class != nil);
+    if orig_class == nil {
+        // The receiver's isa read back as nil — i.e. it isn't a real object
+        // (e.g. a garbage pointer left behind by an unimplemented stub). Treat
+        // the message as unhandled and return nil rather than asserting,
+        // mirroring the nil/invalid-receiver and untracked-class guards.
+        log_dbg!(
+            "[invalid-isa receiver({:?}) {}] returning nil",
+            receiver,
+            selector.as_str(&env.mem)
+        );
+        env.cpu.regs_mut()[0..2].fill(0);
+        return;
+    }
     if !skip_initialize {
         maybe_initialize_class(env, receiver);
     }
