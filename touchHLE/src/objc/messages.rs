@@ -292,7 +292,20 @@ fn objc_msgSend_inner(
             );
         }
 
-        let host_object = env.objc.get_host_object(class).unwrap();
+        let Some(host_object) = env.objc.get_host_object(class) else {
+            // The class in the superclass chain isn't a tracked class — i.e. the
+            // receiver isn't a real object (e.g. a garbage pointer left by an
+            // unimplemented stub). Treat the message as unhandled and return nil
+            // rather than panicking, mirroring the nil/invalid-receiver path above.
+            log_dbg!(
+                "[untracked-class receiver({:?}) class({:?}) {}] returning nil",
+                receiver,
+                class,
+                selector.as_str(&env.mem)
+            );
+            env.cpu.regs_mut()[0..2].fill(0);
+            return;
+        };
 
         if let Some(&super::ClassHostObject {
             superclass,
