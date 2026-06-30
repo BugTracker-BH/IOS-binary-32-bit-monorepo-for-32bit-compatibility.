@@ -583,16 +583,17 @@ unsafe fn composite_layer_recursive(
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
         if n < 60 {
+            // Copy out of the (packed) CGRect to avoid unaligned-ref errors.
+            let bw = host_obj.bounds.size.width;
+            let bh = host_obj.bounds.size.height;
+            let hidden = host_obj.hidden;
+            let opacity = host_obj.opacity;
+            let opaque = host_obj.opaque;
+            let has_px = host_obj.presented_pixels.is_some();
+            let subs = host_obj.sublayers.len();
             log!(
                 "[jc3-comp] visit layer={:?} hidden={} opacity={} opaque={} has_eagl_pixels={} bounds={}x{} subs={}",
-                layer,
-                host_obj.hidden,
-                host_obj.opacity,
-                host_obj.opaque,
-                host_obj.presented_pixels.is_some(),
-                host_obj.bounds.size.width,
-                host_obj.bounds.size.height,
-                host_obj.sublayers.len(),
+                layer, hidden, opacity, opaque, has_px, bw, bh, subs,
             );
         }
     }
