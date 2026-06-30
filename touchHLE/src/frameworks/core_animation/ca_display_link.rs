@@ -13,6 +13,11 @@ use crate::objc::{
     HostObject, NSZonePtr, SEL,
 };
 
+/// [jc3-watch] Original (correct) class pointer of the display-link target, so a
+/// stray guest write that clobbers the view controller's isa can be repaired
+/// each frame. 0 = not set.
+static JC3_ORIG_ISA: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 #[derive(Default)]
 struct CADisplayLinkHostObject {
     target: id,
@@ -52,7 +57,16 @@ pub const CLASSES: ClassExports = objc_classes! {
     // a TextInputViewController, which breaks per-frame drawFrame. JC3-gated.
     if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
         crate::mem::JC3_WATCH_ADDR.store(target.to_bits(), std::sync::atomic::Ordering::Relaxed);
-        log!("[jc3-watch] watching display-link target {:?} for frees", target);
+        // Record the target's correct class so we can restore it each frame if a
+        // stray guest write clobbers the isa word (observed: it flips to
+        // TextInputViewController after ~10 frames, which stops all rendering).
+        let isa = crate::objc::ObjC::read_isa(target, &env.mem);
+        JC3_ORIG_ISA.store(isa.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        log!(
+            "[jc3-watch] watching display-link target {:?} (isa {:?}) for frees/isa-clobber",
+            target,
+            isa
+        );
     }
     let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
     host_object.target = target;
@@ -135,30 +149,28 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     // Signature is `- (void) selector:(CADisplayLink *)sender;`
-    // [jc3-dl] Diagnostic: log the first several fires' target class + selector so
-    // we can see whether the display link is firing on the rendering VC
-    // (JellyCar3ViewController) or the wrong one.
-    {
-        use std::sync::atomic::{AtomicU32, Ordering};
-        static N: AtomicU32 = AtomicU32::new(0);
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        if n < 16 {
-            let cls = if target != nil {
-                let isa = crate::objc::ObjC::read_isa(target, &env.mem);
-                env.objc.get_class_name(isa).to_string()
-            } else {
-                "nil".to_string()
-            };
-            let sel = selector
-                .map(|s| s.as_str(&env.mem).to_string())
-                .unwrap_or_else(|| "<none>".to_string());
-            log!(
-                "[jc3-dl] display link fire #{}: target={:?} class={:?} selector={:?}",
-                n,
-                target,
-                cls,
-                sel
-            );
+    // [jc3-watch] If a stray guest write clobbered the target VC's isa (observed:
+    // it flips to TextInputViewController after ~10 frames, which silently stops
+    // all rendering), restore the correct class so drawFrame keeps reaching the
+    // real JellyCar3ViewController. Only acts when the recorded class differs.
+    if target != nil {
+        let orig = JC3_ORIG_ISA.load(std::sync::atomic::Ordering::Relaxed);
+        if orig != 0 {
+            let cur = crate::objc::ObjC::read_isa(target, &env.mem);
+            if cur.to_bits() != orig {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static LOGGED: AtomicU32 = AtomicU32::new(0);
+                if LOGGED.fetch_add(1, Ordering::Relaxed) < 3 {
+                    log!(
+                        "[jc3-watch] target {:?} isa was clobbered ({:?} -> expected {:#x}); restoring",
+                        target,
+                        cur,
+                        orig
+                    );
+                }
+                let orig_class: crate::objc::Class = crate::mem::Ptr::from_bits(orig);
+                env.mem.write(target.cast::<crate::objc::Class>(), orig_class);
+            }
         }
     }
     () = msg_send(env, (target, selector.unwrap(), this));
