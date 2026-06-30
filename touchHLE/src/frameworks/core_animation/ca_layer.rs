@@ -671,15 +671,28 @@ fn transform_for_conversion(env: &mut Environment, this: id, other: id) -> CGAff
 
         if this_superlayer == nil && other_superlayer == nil {
             if need_common_ancestor {
-                panic!("Layers {this:?} and {other:?} have no common ancestor!");
+                // [jc3] An orphaned layer (e.g. JC3's EAGLView, never parented
+                // into the window) has no common ancestor with the window's
+                // layer. -[EAGLView touchesBegan:] does a locationInView point
+                // conversion that lands here; rather than abort, fall back to the
+                // accumulated transforms (≈identity for a full-screen layer) so
+                // the touch point passes through roughly unchanged.
+                use std::sync::atomic::{AtomicU32, Ordering};
+                static N: AtomicU32 = AtomicU32::new(0);
+                if N.fetch_add(1, Ordering::Relaxed) < 3 {
+                    log!(
+                        "Warning: layers {this:?} and {other:?} have no common ancestor; \
+                         using accumulated transform (touchHLE orphaned-layer fallback)"
+                    );
+                }
+                break (nil, this_transform, other_transform);
             } else {
                 break (nil, this_transform, other_transform);
             }
         }
     };
 
-    assert!((common_ancestor == nil) != need_common_ancestor);
-    if need_common_ancestor {
+    if need_common_ancestor && common_ancestor != nil {
         log_dbg!("{this:?} and {other:?}'s common ancestor: {common_ancestor:?}",);
     }
     log_dbg!("{this:?}'s transform in {common_ancestor:?}: {this_transform:?}");
