@@ -153,11 +153,18 @@ pub const CLASSES: ClassExports = objc_classes! {
 
 - (id)initWithAPI:(EAGLRenderingAPI)api {
     if api != kEAGLRenderingAPIOpenGLES1 {
+        // touchHLE only implements GLES1 fixed-function, but some apps (e.g.
+        // JellyCar 3) request a GLES2 context while only using GLES1 calls at
+        // runtime. Instead of returning nil (which leaves the context nil and
+        // prevents all rendering), provide a GLES1 context. If the app later
+        // issues actual GLES2 calls (shaders, etc.) they'll hit unimplemented
+        // stubs, but that's better than a blank screen. Apps that genuinely
+        // need GLES2 will fail at shader compilation, not at context creation.
         log!(
-            "TODO: App requested EAGL initWithAPI:{}, returning nil as we only support API 1 for now",
-            api
+            "Warning: App requested EAGL initWithAPI:{} (GLES{}), providing GLES1 context instead. \
+             Fixed-function calls will work; shader calls will not.",
+            api, api
         );
-        return nil;
     }
 
     let mut gles1_ins = create_gles1_ctx(env);
