@@ -127,7 +127,9 @@ fn malloc_destroy_zone(env: &mut Environment, zone: MutPtr<malloc_zone_t>) {
 }
 
 fn malloc_zone_free(env: &mut Environment, zone: MutPtr<malloc_zone_t>, ptr: MutVoidPtr) {
-    with_zone(env, zone, |mem, heap| mem.free_in_heap(heap, ptr))
+    with_zone(env, zone, |mem, heap| {
+        mem.free_in_heap(heap, ptr);
+    })
 }
 
 fn malloc_zone_malloc(

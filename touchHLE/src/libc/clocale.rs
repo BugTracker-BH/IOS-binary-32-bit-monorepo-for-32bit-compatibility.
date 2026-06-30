@@ -42,7 +42,7 @@ pub fn setlocale(
         assert_ne!(locale_cstr.len(), 0);
         let new_locale = env.mem.alloc_and_write_cstr(locale_cstr.as_slice());
         if let Some(old_locale) = env.libc_state.clocale.locale.insert(category, new_locale) {
-            env.mem.free(old_locale.cast())
+            env.mem.free(old_locale.cast());
         };
     } else if let Entry::Vacant(entry) = env.libc_state.clocale.locale.entry(category) {
         let default_locale = env.mem.alloc_and_write_cstr(b"C");
