@@ -51,9 +51,9 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
                 if fp == 0 || fp & 3 != 0 {
                     break;
                 }
-                let ret: u32 = env.mem.read(crate::mem::Ptr::from_bits(fp + 4));
+                let ret: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp + 4));
                 chain.push_str(&format!("{:#x} ", ret));
-                let next: u32 = env.mem.read(crate::mem::Ptr::from_bits(fp));
+                let next: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp));
                 if next <= fp {
                     break;
                 }
