@@ -52,6 +52,16 @@ fn semaphore_create(
 
 fn semaphore_signal(env: &mut Environment, semaphore: semaphore_t) -> kern_return_t {
     assert_eq!(sem_post(env, semaphore), 0);
+    // [jc3-fix] On real Mach, semaphore_signal can hand control to a waiting
+    // thread. touchHLE's cooperative scheduler otherwise lets the signaller run
+    // straight on and consume its own signal before the waiter ever runs. FMOD's
+    // audio init creates worker threads and hands off to them via signal/wait;
+    // without a yield here those threads never execute during init, so FMOD's
+    // self-test fails and it aborts with FMOD_ERR_MEMORY. Yield so a waiter can
+    // run. JC3-gated to avoid changing scheduling for apps that already work.
+    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
+        env.yield_thread(crate::environment::ThreadBlock::NotBlocked);
+    }
     let result = KERN_SUCCESS;
     log_dbg!("semaphore_signal({:?}) -> {:?}", semaphore, result);
     result

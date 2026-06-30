@@ -224,6 +224,15 @@ pub fn pthread_create(
 
     log_dbg!("pthread_create({:?}, {:?}, {:?}, {:?}) => 0 (success), created new pthread_t {:?} (thread ID: {})", thread, attr, start_routine, user_data, opaque, thread_id);
 
+    // [jc3-fix] Under touchHLE's cooperative scheduler a newly created thread
+    // won't run until the creator next blocks. FMOD's audio init creates worker
+    // threads then synchronizes with them via semaphores during init; if they
+    // never get to start, the init self-test fails (FMOD_ERR_MEMORY). Yield so
+    // the new thread can begin running. JC3-gated to avoid affecting other apps.
+    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
+        env.yield_thread(crate::environment::ThreadBlock::NotBlocked);
+    }
+
     0 // success
 }
 
