@@ -815,6 +815,14 @@ fn glVertexPointer(
 
 // Drawing
 fn glDrawArrays(env: &mut Environment, mode: GLenum, first: GLint, count: GLsizei) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 30 {
+            log!("[jc3-gl] glDrawArrays #{} mode={:#x} first={} count={}", n, mode, first, count);
+        }
+    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let (tx, ty) = atlas_texcoord_offset(mem);
         let adjust = tx != 0.0 || ty != 0.0;
@@ -851,6 +859,14 @@ fn glDrawElements(
     type_: GLenum,
     indices: ConstVoidPtr,
 ) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 30 {
+            log!("[jc3-gl] glDrawElements #{} mode={:#x} count={} type={:#x}", n, mode, count, type_);
+        }
+    }
     with_ctx_and_mem(env, |gles, mem| unsafe {
         let (tx, ty) = atlas_texcoord_offset(mem);
         let adjust = tx != 0.0 || ty != 0.0;
@@ -887,6 +903,14 @@ fn glDrawElements(
 
 // Clearing
 fn glClear(env: &mut Environment, mask: GLbitfield) {
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 30 {
+            log!("[jc3-gl] glClear #{} mask={:#x}", n, mask);
+        }
+    }
     with_ctx_and_mem(env, |gles, _mem| unsafe { gles.Clear(mask) });
 }
 fn glClearColor(
