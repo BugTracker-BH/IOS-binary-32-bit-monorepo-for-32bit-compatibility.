@@ -512,23 +512,25 @@ impl Environment {
                             (0x1b7914, &[0x2101, 0x7441, 0x2000, 0x4770]),
                             // FMOD::System::getSoftwareFormat
                             (0x1b2678, &[0x2000, 0x4770]),
-                            // FMOD::System::createChannelGroup
+                            // FMOD::System::createChannelGroup (output is in r2 and
+                            // already points at a zero-inited field, so leaving it
+                            // unwritten is safe)
                             (0x1b28bc, &[0x2000, 0x4770]),
                             // FMOD::System::setSoftwareFormat
                             (0x1b2a34, &[0x2000, 0x4770]),
-                            // FMOD::System::createSound -> FMOD_OK. The game's
-                            // addSound() must succeed so the sound-NAME list is
-                            // populated; otherwise the main-menu build reads a
-                            // garbage count and runs away (infinite heap growth).
-                            // The unwritten Sound* output is harmless during the
-                            // menu build (verified) since playback isn't triggered
-                            // there.
-                            (0x1b2944, &[0x2000, 0x4770]),
-                            // NOTE: createStream is intentionally NOT stubbed.
-                            // Faking music-stream success makes the game deref a
-                            // null stream (ExceptionRaised). The real one returns a
-                            // graceful "load failed" error that the game handles by
-                            // logging + skipping the track, so no throw.
+                            // FMOD::System::createSound  — return FMOD_OK and write
+                            // NULL to the output Sound** (5th arg, on the stack), so
+                            // the game's sound list populates (no menu runaway) and a
+                            // later deref of the (null) Sound* is zero-filled, not a
+                            // wild/garbage pointer that throws.
+                            //   ldr r1,[sp] (0x9900); movs r0,#0 (0x2000);
+                            //   str r0,[r1] (0x6008); bx lr (0x4770)
+                            (0x1b2944, &[0x9900, 0x2000, 0x6008, 0x4770]),
+                            // FMOD::System::createStream — same treatment (music).
+                            // Must "succeed" so the menu's track list is populated
+                            // (otherwise garbage count -> runaway), with NULL output
+                            // so playback derefs null safely instead of throwing.
+                            (0x1b28f8, &[0x9900, 0x2000, 0x6008, 0x4770]),
                         ];
                         for &(addr, hws) in stubs {
                             for (i, &hw) in hws.iter().enumerate() {
