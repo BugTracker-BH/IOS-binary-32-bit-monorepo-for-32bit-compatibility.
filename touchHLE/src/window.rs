@@ -1647,16 +1647,18 @@ impl Window {
             let [x, y] = matrix.transform([x, y]);
             // back to pixels
             let (out_w, out_h) = window.size_unrotated_unscaled();
-            // [jc3] JC3 renders landscape-native with identity rotation (see
-            // rotation_matrix), so its touch hit-testing is in landscape coords.
-            // size_unrotated_unscaled() is portrait (320x480); swap to landscape
-            // (480x320) so taps line up with the on-screen menu.
-            let (out_w, out_h) =
-                if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
-                    (out_h, out_w)
-                } else {
-                    (out_w, out_h)
-                };
+            // [jc3] On the DESKTOP, JC3 is presented landscape with identity
+            // rotation, so touches must map to landscape coords (swap the
+            // portrait 320x480 to 480x320). On iOS the normal device-orientation
+            // rotation is used (see rotation_matrix), so touches use the normal
+            // portrait mapping — don't swap there.
+            let (out_w, out_h) = if cfg!(not(target_os = "ios"))
+                && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                (out_h, out_w)
+            } else {
+                (out_w, out_h)
+            };
             let out_x = (x + 0.5) * out_w as f32;
             let out_y = (y + 0.5) * out_h as f32;
             // Round to match touch precision of official devices.
@@ -2759,11 +2761,16 @@ impl Window {
     /// rotating texture co-ordinates to display the image in the window; when
     /// rotating input co-ordinates, invert the matrix.
     pub fn rotation_matrix(&self) -> Matrix<2> {
-        // [jc3] JC3 renders its framebuffer already in landscape, so applying the
-        // normal portrait→landscape rotation over-rotates it 90°. Present it
-        // un-rotated. (Only the EAGL direct-present path uses this for JC3; the
-        // compositor is skipped.)
-        if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+        // [jc3] JC3 renders its framebuffer already in landscape. On the DESKTOP
+        // the SDL window is itself landscape, so the normal portrait→landscape
+        // rotation would over-rotate it 90° — present it un-rotated there. On
+        // iOS the screen framebuffer is the device's portrait-native FBO and the
+        // content must still be rotated for landscape display (exactly like
+        // JellyCar 1/2), so do NOT force identity there — fall through to the
+        // device-orientation matrix.
+        if cfg!(not(target_os = "ios"))
+            && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+        {
             return Matrix::identity();
         }
         match self.device_orientation {
