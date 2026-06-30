@@ -128,6 +128,32 @@ pub const CLASSES: ClassExports = objc_classes! {
         }
     }
     // Signature is `- (void) selector:(CADisplayLink *)sender;`
+    // [jc3-dl] Diagnostic: log the first several fires' target class + selector so
+    // we can see whether the display link is firing on the rendering VC
+    // (JellyCar3ViewController) or the wrong one.
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 16 {
+            let cls = if target != nil {
+                let isa = crate::objc::ObjC::read_isa(target, &env.mem);
+                env.objc.get_class_name(isa).to_string()
+            } else {
+                "nil".to_string()
+            };
+            let sel = selector
+                .map(|s| s.as_str(&env.mem).to_string())
+                .unwrap_or_else(|| "<none>".to_string());
+            log!(
+                "[jc3-dl] display link fire #{}: target={:?} class={:?} selector={:?}",
+                n,
+                target,
+                cls,
+                sel
+            );
+        }
+    }
     () = msg_send(env, (target, selector.unwrap(), this));
 }
 
