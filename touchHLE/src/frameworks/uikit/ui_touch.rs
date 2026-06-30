@@ -220,15 +220,33 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         // Assumes the windows in the list are ordered back-to-front.
         // TODO: this may not be correct once we support windowLevel.
         let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
-        let Some((window, location_in_window)) = windows.into_iter().rev().find_map(|window| {
+        let mut found: Option<(id, CGPoint)> = None;
+        for &window in windows.iter().rev() {
             let location_in_window: CGPoint =
                 msg![env; window convertPoint:location fromWindow:nil];
             if msg![env; window pointInside:location_in_window withEvent:event] {
-                Some((window, location_in_window))
-            } else {
-                None
+                found = Some((window, location_in_window));
+                break;
             }
-        }) else {
+        }
+        // [jc3] JC3's UIWindow is portrait (320 wide) but touches are mapped into
+        // the landscape render space (x up to 480), so pointInside rejects the
+        // right half of the screen and those taps are lost. Fall back to the
+        // frontmost visible window so the whole screen is tappable.
+        if found.is_none()
+            && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+        {
+            for &window in windows.iter().rev() {
+                let hidden: bool = msg![env; window isHidden];
+                if !hidden {
+                    let location_in_window: CGPoint =
+                        msg![env; window convertPoint:location fromWindow:nil];
+                    found = Some((window, location_in_window));
+                    break;
+                }
+            }
+        }
+        let Some((window, location_in_window)) = found else {
             log!(
                 "Couldn't find a window for touch at {:?}, discarding",
                 location,
