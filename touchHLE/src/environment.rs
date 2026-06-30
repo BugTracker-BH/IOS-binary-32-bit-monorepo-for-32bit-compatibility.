@@ -495,6 +495,7 @@ impl Environment {
                         // b #0xbfe20 from 0xbfe0c: offset=(0xbfe20-0xbfe0c-4)/2 = 8 → 0xE008
                         env.mem.write(patch_addr, 0x08u8);
                         env.mem.write(Ptr::from_bits(0xbfe0d), 0xE0u8);
+                        env.cpu.invalidate_cache_range(0xbfe0c, 2);
                         log!("Applied JellyCar 3 drawFrame render-gate bypass patch at 0xbfe0c");
                     }
                     // Some apps use the stack inside the static initializer.
