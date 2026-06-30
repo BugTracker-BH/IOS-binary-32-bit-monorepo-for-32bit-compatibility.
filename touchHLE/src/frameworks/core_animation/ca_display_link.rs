@@ -115,38 +115,23 @@ pub const CLASSES: ClassExports = objc_classes! {
             if env.objc.object_has_method_named(&env.mem, target, "view") {
                 let view: id = msg![env; target view];
                 if view != nil {
-                    log!("[jc3-layout] Triggering layoutSubviews on target's view {:?}", view);
                     () = msg![env; view layoutSubviews];
                     // EAGLView is likely a subview of the VC's root view
                     let subviews: id = msg![env; view subviews];
                     let count: u32 = msg![env; subviews count];
                     for i in 0..count {
                         let sv: id = msg![env; subviews objectAtIndex:i];
-                        log!("[jc3-layout] target.view.subview[{}] = {:?}", i, sv);
                         () = msg![env; sv layoutSubviews];
                     }
                 }
             }
-            // Also try the key window's subviews (two levels deep).
-            let app: id = msg_class![env; UIApplication sharedApplication];
-            let window: id = msg![env; app keyWindow];
-            if window != nil {
-                log!("[jc3-layout] key window {:?}, triggering layout on subviews", window);
-                () = msg![env; window layoutSubviews];
-                let subviews: id = msg![env; window subviews];
-                let count: u32 = msg![env; subviews count];
-                for i in 0..count {
-                    let subview: id = msg![env; subviews objectAtIndex:i];
-                    log!("[jc3-layout] subview[{}] = {:?}", i, subview);
-                    () = msg![env; subview layoutSubviews];
-                    let inner: id = msg![env; subview subviews];
-                    let ic: u32 = msg![env; inner count];
-                    for j in 0..ic {
-                        let v: id = msg![env; inner objectAtIndex:j];
-                        log!("[jc3-layout] subview[{}][{}] = {:?}", i, j, v);
-                        () = msg![env; v layoutSubviews];
-                    }
-                }
+            // Re-call startAnimation on the target after layout — the first
+            // call happened before the EAGLContext existed, so _animating wasn't
+            // set. Now that createFramebuffer ran (from layoutSubviews above),
+            // the context exists and startAnimation will set the flag.
+            if env.objc.object_has_method_named(&env.mem, target, "startAnimation") {
+                let sel = env.objc.lookup_selector("startAnimation").unwrap();
+                () = msg_send(env, (target, sel));
             }
         }
     }
