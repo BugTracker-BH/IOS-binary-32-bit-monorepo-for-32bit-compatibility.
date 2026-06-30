@@ -34,34 +34,15 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    // [jc3-diag] Sample periodically and unwind the ARM frame-pointer (r7)
-    // chain to find the *game-side* caller (the immediate LR is libstdc++).
-    // During the post-FMOD runaway loop this chain is constant and reveals the
-    // looping JellyCar3 function (__text < 0x337000); map it via the symbol
-    // table.
-    {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static N: AtomicUsize = AtomicUsize::new(0);
-        let n = N.fetch_add(1, Ordering::Relaxed);
-        if n % 100_000 == 0 {
-            let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
-            let mut chain = format!("size={:#x} LR={:#x} frames=[", size, lr);
-            let mut fp = env.cpu.regs()[7];
-            for _ in 0..12 {
-                if fp == 0 || fp & 3 != 0 {
-                    break;
-                }
-                let ret: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp + 4));
-                chain.push_str(&format!("{:#x} ", ret));
-                let next: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp));
-                if next <= fp {
-                    break;
-                }
-                fp = next;
-            }
-            chain.push(']');
-            log!("[jc3-diag] malloc sample #{} {}", n, chain);
-        }
+    // [jc3-diag] Log large allocations (>=64KB) with guest caller, to see the
+    // sizes FMOD requests during System::init (FMOD_ERR_MEMORY comes from its
+    // MemPool returning NULL for a buffer alloc). Map LR via the symbol table.
+    if size >= 0x10000 {
+        log!(
+            "[jc3-diag] malloc size={:#x} guest LR={:#x}",
+            size,
+            env.cpu.regs()[crate::cpu::Cpu::LR]
+        );
     }
 
     env.mem.alloc(size)
@@ -76,6 +57,17 @@ fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoid
     set_errno(env, 0);
 
     let total = size.checked_mul(count).unwrap();
+    // [jc3-diag] Log large calloc requests with caller — FMOD's failing
+    // MemPool::calloc (output buffer = rate*channels*blocksize*2) routes here.
+    if total >= 0x10000 {
+        log!(
+            "[jc3-diag] calloc total={:#x} (count={:#x} size={:#x}) guest LR={:#x}",
+            total,
+            count,
+            size,
+            env.cpu.regs()[crate::cpu::Cpu::LR]
+        );
+    }
     env.mem.calloc(total)
 }
 
