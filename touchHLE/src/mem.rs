@@ -22,6 +22,11 @@ pub use allocator::{HeapAllocator, VMAllocError};
 use crate::libc::wchar::wchar_t;
 use crate::mem::allocator::VMAllocator;
 
+/// [jc3-watch] Guest address of an object to watch for free()s. Set by the
+/// CADisplayLink code to the display-link target (the game's view controller)
+/// so we can detect when that live object is prematurely freed/reused. 0 = off.
+pub static JC3_WATCH_ADDR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// Equivalent of `usize` for guest memory.
 pub type GuestUSize = u32;
 
@@ -667,6 +672,22 @@ impl Mem {
     ) -> GuestUSize {
         let (vm, heap) = self.allocators_mut(heap);
         let size = heap.free(vm, ptr.to_bits());
+
+        // [jc3-watch] Detect a free() of the watched live object (the game's
+        // view controller that the display link drives). A free here = the
+        // premature release that lets a TextInputViewController reuse its memory
+        // and break rendering. Backtrace shows the host call path.
+        {
+            let w = JC3_WATCH_ADDR.load(std::sync::atomic::Ordering::Relaxed);
+            if w != 0 && ptr.to_bits() == w {
+                log!(
+                    "[jc3-watch] free() of WATCHED object {:#x} (size={:#x}); host backtrace:\n{}",
+                    w,
+                    size,
+                    std::backtrace::Backtrace::force_capture()
+                );
+            }
+        }
 
         // [jc3-diag] size == 0 means the allocator did not recognise this
         // pointer (it also prints "Can't free … unknown allocation"). This is

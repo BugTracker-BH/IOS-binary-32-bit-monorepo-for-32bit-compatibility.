@@ -47,6 +47,13 @@ pub const CLASSES: ClassExports = objc_classes! {
                    userInfo:nil
                     repeats:true];
     retain(env, target);
+    // [jc3-watch] Watch this target (the game's view controller) for premature
+    // free()s — under JellyCar 3 it gets freed mid-init and its memory reused by
+    // a TextInputViewController, which breaks per-frame drawFrame. JC3-gated.
+    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
+        crate::mem::JC3_WATCH_ADDR.store(target.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        log!("[jc3-watch] watching display-link target {:?} for frees", target);
+    }
     let host_object = env.objc.borrow_mut::<CADisplayLinkHostObject>(display_link);
     host_object.target = target;
     host_object.selector = Some(sel);
