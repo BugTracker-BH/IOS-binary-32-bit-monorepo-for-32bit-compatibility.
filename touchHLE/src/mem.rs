@@ -522,6 +522,21 @@ impl Mem {
     {
         let size = guest_size_of::<T>();
         assert!(size > 0);
+        // [jc3-watch] Catch a host write that touches the watched object's isa
+        // (offset 0). This is how the live view controller's class gets clobbered
+        // to TextInputViewController. Backtrace identifies the writer.
+        {
+            let w = JC3_WATCH_ADDR.load(std::sync::atomic::Ordering::Relaxed);
+            if w != 0 && ptr.to_bits() <= w && w < ptr.to_bits() + size {
+                log!(
+                    "[jc3-watch] write to WATCHED object {:#x} (write at {:#x}, size {:#x}); host backtrace:\n{}",
+                    w,
+                    ptr.to_bits(),
+                    size,
+                    std::backtrace::Backtrace::force_capture()
+                );
+            }
+        }
         let slice = self.bytes_at_mut(ptr.cast(), size);
         let ptr: *mut T = slice.as_mut_ptr().cast();
         // It's unaligned because what is well-aligned for the guest is not
