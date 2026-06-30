@@ -64,7 +64,16 @@ fn semaphore_wait(env: &mut Environment, semaphore: semaphore_t) -> kern_return_
     result
 }
 
-fn semaphore_destroy(env: &mut Environment, semaphore: semaphore_t) -> kern_return_t {
+fn semaphore_destroy(
+    env: &mut Environment,
+    task: task_t,
+    semaphore: semaphore_t,
+) -> kern_return_t {
+    // Mach's signature is `semaphore_destroy(task_t task, semaphore_t
+    // semaphore)`. The shim previously omitted the `task` parameter, so it read
+    // `task` (= MACH_TASK_SELF, 0x7461736b "task") as the semaphore and freed
+    // that, corrupting the heap (this broke FMOD init in JellyCar 3).
+    assert_eq!(task, MACH_TASK_SELF);
     sem_destroy(env, semaphore);
     env.mem.free(semaphore.cast());
     let result = KERN_SUCCESS;
@@ -76,5 +85,5 @@ pub const FUNCTIONS: FunctionExports = &[
     export_c_func!(semaphore_create(_, _, _, _)),
     export_c_func!(semaphore_signal(_)),
     export_c_func!(semaphore_wait(_)),
-    export_c_func!(semaphore_destroy(_)),
+    export_c_func!(semaphore_destroy(_, _)),
 ];
