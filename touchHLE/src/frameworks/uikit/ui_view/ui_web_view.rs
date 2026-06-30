@@ -7,7 +7,7 @@
 
 use crate::frameworks::foundation::ns_string::to_rust_string;
 use crate::msg;
-use crate::objc::{id, nil, objc_classes, ClassExports};
+use crate::objc::{id, msg_super, nil, objc_classes, ClassExports};
 use std::borrow::Cow;
 
 pub const CLASSES: ClassExports = objc_classes! {
@@ -17,8 +17,17 @@ pub const CLASSES: ClassExports = objc_classes! {
 @implementation UIWebView: UIView
 
 // NSCoding implementation
-- (id)initWithCoder:(id)_coder {
-    todo!()
+- (id)initWithCoder:(id)coder {
+    // UIWebView is not implemented (no web engine in touchHLE). Initialize as a
+    // plain empty UIView via the superclass so apps that load one from a nib —
+    // e.g. JellyCar 3's full-screen web view (news/ads/"more games") opened from
+    // the menu — get a valid, inert view instead of crashing.
+    let this: id = msg_super![env; this initWithCoder:coder];
+    log!(
+        "TODO: [(UIWebView*){:?} initWithCoder:] stubbed as empty UIView (web view unimplemented)",
+        this
+    );
+    this
 }
 
 - (())setScalesPageToFit:(bool)_scales {
