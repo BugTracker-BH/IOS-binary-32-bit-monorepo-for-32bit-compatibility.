@@ -72,7 +72,7 @@ const UIViewAnimationCurveLinear: UIViewAnimationCurve = 3;
 #[derive(Default)]
 pub struct State {
     /// List of views for internal purposes. Non-retaining!
-    pub(super) views: Vec<id>,
+    pub(crate) views: Vec<id>,
     pub ui_window: ui_window::State,
     pub animation_block_count: usize,
 }
