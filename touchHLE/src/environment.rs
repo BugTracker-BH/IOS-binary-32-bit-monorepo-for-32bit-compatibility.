@@ -564,6 +564,15 @@ impl Environment {
                             (0x1b2944, sound_stub.to_vec()),
                             // FMOD::System::createStream -> dummy Sound*, FMOD_OK
                             (0x1b28f8, sound_stub.to_vec()),
+                            // -[JellyCar3ViewController messageRx:] news-ticker handler
+                            // (msg 0x2b): `count = [[self tickerStrings] count]` then
+                            // loops that many times building a vector<string>. With no
+                            // network (CFNetwork unimplemented) tickerStrings is invalid,
+                            // so the count is garbage and the loop runs away (1MB+ vector
+                            // -> freeze). Force the count to 0 (empty ticker, correct
+                            // offline): patch the `[… count]` msgSend @ 0xbf0fc to
+                            // `movs r0,#0; nop`.
+                            (0xbf0fc, vec![0x2000, 0xbf00]),
                         ];
                         for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
