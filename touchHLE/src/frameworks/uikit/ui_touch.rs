@@ -234,6 +234,7 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         // right half of the screen and those taps are lost. Fall back to the
         // frontmost visible window so the whole screen is tappable.
         if found.is_none()
+            && cfg!(not(target_os = "ios"))
             && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
         {
             for &window in windows.iter().rev() {
@@ -260,7 +261,9 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         // the window's placeholder view and the game never receives touches.
         // Redirect to the EAGLView (found in the view registry by class).
         let view: id =
-            if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+            if cfg!(not(target_os = "ios"))
+                && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+            {
                 let views = env.framework_state.uikit.ui_view.views.clone();
                 let mut eagl = nil;
                 for v in views {

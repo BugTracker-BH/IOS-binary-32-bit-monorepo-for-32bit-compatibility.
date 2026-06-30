@@ -286,9 +286,13 @@ pub const CLASSES: ClassExports = objc_classes! {
 
     // [jc3] Orphaned-CAEAGLLayer workaround: present the bound renderbuffer
     // straight to the window and let the compositor be skipped (see
-    // JC3_DIRECT_EAGL_PRESENT). Without this, JC3's menu renders into a layer the
-    // compositor never visits, leaving the window white.
-    if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+    // JC3_DIRECT_EAGL_PRESENT). DESKTOP-ONLY: on iOS the screen is driven by the
+    // Core Animation compositor (present_frame_to_calayer → CAEAGLLayer), so a
+    // direct swap_window present does NOT reach the device screen — iOS must use
+    // the normal present path (same as JellyCar 1/2).
+    if cfg!(not(target_os = "ios"))
+        && crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed)
+    {
         unsafe {
             present_renderbuffer(env);
         }

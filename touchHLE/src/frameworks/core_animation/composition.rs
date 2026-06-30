@@ -85,12 +85,12 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         return None;
     }
 
-    // [jc3] When JC3 direct-EAGL-present is active, the EAGL renderbuffer is
-    // presented straight to the window and the menu's CAEAGLLayer is orphaned
-    // (not in this tree). Running the compositor would just overwrite the screen
-    // with the EAGL-less window tree (white), so skip it.
-    if crate::mem::JC3_DIRECT_EAGL_PRESENT
-        .load(std::sync::atomic::Ordering::Relaxed)
+    // [jc3] DESKTOP-ONLY: paired with the direct-present hack in eagl.rs. On iOS
+    // the compositor IS the screen present (present_frame_to_calayer), so it must
+    // NOT be skipped — skipping it leaves the device screen black.
+    if cfg!(not(target_os = "ios"))
+        && crate::mem::JC3_DIRECT_EAGL_PRESENT
+            .load(std::sync::atomic::Ordering::Relaxed)
     {
         return None;
     }
