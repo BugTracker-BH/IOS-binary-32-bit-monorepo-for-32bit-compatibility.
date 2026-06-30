@@ -576,6 +576,27 @@ unsafe fn composite_layer_recursive(
     // It might need to be reworked in the future into a guest presentationLayer
     let host_obj = animation_state.create_presentation_layer(env, layer);
 
+    // [jc3-gl] Trace what the compositor visits and whether each layer carries
+    // EAGL pixels, so we can see if the menu's CAEAGLLayer is reached/drawn.
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 60 {
+            log!(
+                "[jc3-comp] visit layer={:?} hidden={} opacity={} opaque={} has_eagl_pixels={} bounds={}x{} subs={}",
+                layer,
+                host_obj.hidden,
+                host_obj.opacity,
+                host_obj.opaque,
+                host_obj.presented_pixels.is_some(),
+                host_obj.bounds.size.width,
+                host_obj.bounds.size.height,
+                host_obj.sublayers.len(),
+            );
+        }
+    }
+
     if host_obj.hidden {
         return;
     }
