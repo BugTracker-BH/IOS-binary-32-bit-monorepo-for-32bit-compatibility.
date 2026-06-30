@@ -2749,6 +2749,13 @@ impl Window {
     /// rotating texture co-ordinates to display the image in the window; when
     /// rotating input co-ordinates, invert the matrix.
     pub fn rotation_matrix(&self) -> Matrix<2> {
+        // [jc3] JC3 renders its framebuffer already in landscape, so applying the
+        // normal portrait→landscape rotation over-rotates it 90°. Present it
+        // un-rotated. (Only the EAGL direct-present path uses this for JC3; the
+        // compositor is skipped.)
+        if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+            return Matrix::identity();
+        }
         match self.device_orientation {
             DeviceOrientation::Portrait => Matrix::identity(),
             DeviceOrientation::PortraitUpsideDown => Matrix::z_rotation(PI),
