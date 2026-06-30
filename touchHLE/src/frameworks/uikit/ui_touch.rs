@@ -237,6 +237,29 @@ fn handle_touches_down(env: &mut Environment, map: HashMap<FingerId, Coords>) {
         };
 
         let view: id = msg![env; window hitTest:location_in_window withEvent:event];
+        // [jc3] The game's input handler is -[EAGLView touchesBegan:], but JC3's
+        // EAGLView is orphaned (not parented into the window), so hitTest returns
+        // the window's placeholder view and the game never receives touches.
+        // Redirect to the EAGLView (found in the view registry by class).
+        let view: id =
+            if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+                let views = env.framework_state.uikit.ui_view.views.clone();
+                let mut eagl = nil;
+                for v in views {
+                    let cls = crate::objc::ObjC::read_isa(v, &env.mem);
+                    if env.objc.get_class_name(cls) == "EAGLView" {
+                        eagl = v;
+                        break;
+                    }
+                }
+                if eagl != nil {
+                    eagl
+                } else {
+                    view
+                }
+            } else {
+                view
+            };
         if view == nil {
             log!(
                 "Couldn't find a view for touch at {:?} in window {:?}, discarding",
