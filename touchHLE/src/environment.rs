@@ -514,12 +514,14 @@ impl Environment {
                             (0x1b2678, &[0x2000, 0x4770]),
                             // FMOD::System::createChannelGroup
                             (0x1b28bc, &[0x2000, 0x4770]),
-                            // FMOD::System::createStream
-                            (0x1b28f8, &[0x2000, 0x4770]),
-                            // FMOD::System::createSound
-                            (0x1b2944, &[0x2000, 0x4770]),
                             // FMOD::System::setSoftwareFormat
                             (0x1b2a34, &[0x2000, 0x4770]),
+                            // NOTE: createSound / createStream are intentionally NOT
+                            // stubbed. Faking success makes the game use a null/garbage
+                            // Sound* and dereference it (ExceptionRaised). Letting the
+                            // real ones run returns a graceful "load failed" error that
+                            // the game already handles (logs + skips the track), so the
+                            // menu builds and renders without throwing.
                         ];
                         for &(addr, hws) in stubs {
                             for (i, &hw) in hws.iter().enumerate() {
