@@ -7,7 +7,7 @@
 //!
 //! [Audio Unit Programming Guide](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/AudioUnitProgrammingGuide/TheAudioUnit/TheAudioUnit.html)
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::audio::openal::al_types::{ALuint, ALvoid};
 use crate::audio::openal::{AL_BUFFERS_PROCESSED, AL_PLAYING, AL_SOURCE_STATE};
@@ -218,20 +218,6 @@ fn AudioOutputUnitStart(env: &mut Environment, ci: AudioUnit) -> OSStatus {
     audio_unit_state.al_source = Some(source);
     audio_unit_state.last_render_time = Some(Instant::now());
     audio_unit_state.started = true;
-
-    // [jc3-fix] Prime the render callback once. FMOD's System::init starts the
-    // output unit and then waits (on its mixer thread) for the audio system to
-    // pull the first buffer via the render callback. touchHLE normally drives
-    // that callback only from the main run loop, which is blocked during FMOD's
-    // synchronous init — so the callback never fires, FMOD's self-test times
-    // out, and it aborts with FMOD_ERR_MEMORY. Driving it once here lets the
-    // self-test observe audio flowing. JC3-gated to avoid touching games that
-    // already work. Back-date last_render_time so a non-trivial frame count is
-    // requested (~480 frames at 24kHz) rather than ~0.
-    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
-        audio_unit_state.last_render_time = Some(Instant::now() - Duration::from_millis(20));
-        render_audio_unit(env, ci);
-    }
 
     let result = 0; // Success
     log_dbg!("AudioOutputUnitStart({:?}) -> {:?}", ci, result);
