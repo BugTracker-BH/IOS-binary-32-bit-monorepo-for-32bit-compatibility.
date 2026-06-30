@@ -506,43 +506,68 @@ impl Environment {
                     //   - the rest: `movs r0,#0; bx lr` (0x2000, 0x4770)
                     if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
                         use crate::mem::{MutPtr, Ptr};
-                        // (start_addr, halfwords) Thumb stubs, all FMOD::System*
-                        let stubs: &[(u32, &[u16])] = &[
-                            // FMOD::SystemI::init
-                            (0x1b7914, &[0x2101, 0x7441, 0x2000, 0x4770]),
-                            // FMOD::System::getSoftwareFormat
-                            (0x1b2678, &[0x2000, 0x4770]),
-                            // FMOD::System::createChannelGroup (output is in r2 and
-                            // already points at a zero-inited field, so leaving it
-                            // unwritten is safe)
-                            (0x1b28bc, &[0x2000, 0x4770]),
-                            // FMOD::System::setSoftwareFormat
-                            (0x1b2a34, &[0x2000, 0x4770]),
-                            // FMOD::System::createSound  — return FMOD_OK and write
-                            // NULL to the output Sound** (5th arg, on the stack), so
-                            // the game's sound list populates (no menu runaway) and a
-                            // later deref of the (null) Sound* is zero-filled, not a
-                            // wild/garbage pointer that throws.
-                            //   ldr r1,[sp] (0x9900); movs r0,#0 (0x2000);
-                            //   str r0,[r1] (0x6008); bx lr (0x4770)
-                            (0x1b2944, &[0x9900, 0x2000, 0x6008, 0x4770]),
-                            // FMOD::System::createStream — same treatment (music).
-                            // Must "succeed" so the menu's track list is populated
-                            // (otherwise garbage count -> runaway), with NULL output
-                            // so playback derefs null safely instead of throwing.
-                            (0x1b28f8, &[0x9900, 0x2000, 0x6008, 0x4770]),
+
+                        // Allocate one zeroed dummy FMOD Sound object. createSound/
+                        // createStream hand this back so the game gets a NON-NULL
+                        // Sound* whose fields all read as zero. Non-null keeps the
+                        // menu on its "has sound" code path (a null pointer sends it
+                        // down a path that reads a garbage count and runs away);
+                        // zeroed fields make the later (silent) deref safe instead of
+                        // dereferencing a wild stack-garbage pointer (which threw).
+                        let dummy_sound = env.mem.alloc(0x400);
+                        let d = dummy_sound.to_bits();
+                        for i in 0..0x100u32 {
+                            let p: MutPtr<u32> = Ptr::from_bits(d + i * 4);
+                            env.mem.write(p, 0u32);
+                        }
+                        // Thumb stub for createSound/createStream: write the dummy
+                        // pointer to the output Sound** (5th arg, on the stack) and
+                        // return FMOD_OK.
+                        //   ldr r0,[pc,#8] (0x4802) -> load dummy ptr literal
+                        //   ldr r1,[sp]    (0x9900) -> output Sound**
+                        //   str r0,[r1]    (0x6008) -> *output = dummy
+                        //   movs r0,#0     (0x2000) -> FMOD_OK
+                        //   bx lr          (0x4770)
+                        //   nop            (0xbf00) -> align literal to 4 bytes
+                        //   <dummy ptr lo16>, <dummy ptr hi16>
+                        let sound_stub: [u16; 8] = [
+                            0x4802,
+                            0x9900,
+                            0x6008,
+                            0x2000,
+                            0x4770,
+                            0xbf00,
+                            (d & 0xffff) as u16,
+                            (d >> 16) as u16,
                         ];
-                        for &(addr, hws) in stubs {
+
+                        // (start_addr, halfwords) Thumb stubs, all FMOD::System*
+                        let stubs: Vec<(u32, Vec<u16>)> = vec![
+                            // FMOD::SystemI::init -> set this[0x11]=1, return FMOD_OK
+                            (0x1b7914, vec![0x2101, 0x7441, 0x2000, 0x4770]),
+                            // FMOD::System::getSoftwareFormat -> FMOD_OK
+                            (0x1b2678, vec![0x2000, 0x4770]),
+                            // FMOD::System::createChannelGroup -> FMOD_OK (output in r2
+                            // already points at a zero-inited field; safe to leave)
+                            (0x1b28bc, vec![0x2000, 0x4770]),
+                            // FMOD::System::setSoftwareFormat -> FMOD_OK
+                            (0x1b2a34, vec![0x2000, 0x4770]),
+                            // FMOD::System::createSound  -> dummy Sound*, FMOD_OK
+                            (0x1b2944, sound_stub.to_vec()),
+                            // FMOD::System::createStream -> dummy Sound*, FMOD_OK
+                            (0x1b28f8, sound_stub.to_vec()),
+                        ];
+                        for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
-                                let p: MutPtr<u16> = Ptr::from_bits(addr + (i as u32) * 2);
+                                let p: MutPtr<u16> = Ptr::from_bits(*addr + (i as u32) * 2);
                                 env.mem.write(p, hw);
                             }
-                            env.cpu.invalidate_cache_range(addr, (hws.len() * 2) as u32);
+                            env.cpu.invalidate_cache_range(*addr, (hws.len() * 2) as u32);
                         }
                         log!(
-                            "Applied JellyCar 3 FMOD bypass stubs ({} functions) \
+                            "Applied JellyCar 3 FMOD bypass stubs (dummy Sound @ {:#x}) \
                              (audio disabled; menu/render enabled)",
-                            stubs.len()
+                            d
                         );
                     }
 
