@@ -103,30 +103,40 @@ pub const CLASSES: ClassExports = objc_classes! {
         return;
     }
     // One-shot: on the very first fire, trigger layoutSubviews on the key
-    // window's view hierarchy. This is how JellyCar 3's EAGLView gets its
-    // createFramebuffer called — it needs to happen after game init is done
-    // (not during addSubview, which is too early and crashes JC1). Since JC1
-    // doesn't use CADisplayLink, this path is JC1-safe. We use ObjC messages
-    // (not the host `views` vec) because EAGLView is a guest-defined class.
+    // window's rootViewController's view. This is how JellyCar 3's EAGLView
+    // gets its createFramebuffer called — it needs to happen after game init
+    // is done (not during addSubview, which is too early and crashes JC1).
+    // Since JC1 doesn't use CADisplayLink, this path is JC1-safe.
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static LAYOUT_DONE: AtomicBool = AtomicBool::new(false);
         if !LAYOUT_DONE.swap(true, Ordering::Relaxed) {
+            // The display link target is typically the VC itself — try its view.
+            if env.objc.object_has_method_named(&env.mem, target, "view") {
+                let view: id = msg![env; target view];
+                if view != nil {
+                    log!("[jc3-layout] Triggering layoutSubviews on target's view {:?}", view);
+                    () = msg![env; view layoutSubviews];
+                }
+            }
+            // Also try the key window's subviews (two levels deep).
             let app: id = msg_class![env; UIApplication sharedApplication];
             let window: id = msg![env; app keyWindow];
             if window != nil {
-                // Get subviews and call layoutSubviews on each (including EAGLView)
+                log!("[jc3-layout] key window {:?}, triggering layout on subviews", window);
+                () = msg![env; window layoutSubviews];
                 let subviews: id = msg![env; window subviews];
                 let count: u32 = msg![env; subviews count];
                 for i in 0..count {
                     let subview: id = msg![env; subviews objectAtIndex:i];
+                    log!("[jc3-layout] subview[{}] = {:?}", i, subview);
                     () = msg![env; subview layoutSubviews];
-                    // Also check one level deeper (EAGLView may be a subview of the VC's view)
-                    let inner_subviews: id = msg![env; subview subviews];
-                    let inner_count: u32 = msg![env; inner_subviews count];
-                    for j in 0..inner_count {
-                        let inner: id = msg![env; inner_subviews objectAtIndex:j];
-                        () = msg![env; inner layoutSubviews];
+                    let inner: id = msg![env; subview subviews];
+                    let ic: u32 = msg![env; inner count];
+                    for j in 0..ic {
+                        let v: id = msg![env; inner objectAtIndex:j];
+                        log!("[jc3-layout] subview[{}][{}] = {:?}", i, j, v);
+                        () = msg![env; v layoutSubviews];
                     }
                 }
             }
