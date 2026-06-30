@@ -481,23 +481,6 @@ impl Environment {
                 env.with_yielder(yielder, move |env| {
                     echo!("CPU emulation begins now.");
 
-                    // JellyCar 3 runtime patch: the game's drawFrame method checks an
-                    // internal flag (set during init that depends on FMOD succeeding)
-                    // before rendering. FMOD fails under touchHLE, leaving the flag at 0
-                    // and drawFrame skipping all GL draw calls (white screen). Patch the
-                    // conditional branch at 0xbfe0c (cbnz r3, #0xbfe20) to an
-                    // unconditional branch (b #0xbfe20) so drawFrame always renders.
-                    // This is safe: the display link only fires after init completes.
-                    // The patch is a 2-byte Thumb instruction replacement.
-                    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
-                        use crate::mem::Ptr;
-                        let patch_addr: crate::mem::MutPtr<u8> = Ptr::from_bits(0xbfe0c);
-                        // b #0xbfe20 from 0xbfe0c: offset=(0xbfe20-0xbfe0c-4)/2 = 8 → 0xE008
-                        env.mem.write(patch_addr, 0x08u8);
-                        env.mem.write(Ptr::from_bits(0xbfe0d), 0xE0u8);
-                        env.cpu.invalidate_cache_range(0xbfe0c, 2);
-                        log!("Applied JellyCar 3 drawFrame render-gate bypass patch at 0xbfe0c");
-                    }
                     // Some apps use the stack inside the static initializer.
                     // While properly behaving apps should be fine, some app
                     // will try to poke the top of the stack, so we'll give
