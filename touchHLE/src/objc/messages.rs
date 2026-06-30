@@ -288,8 +288,17 @@ fn objc_msgSend_inner(
                 ..
             } = class_host_object.as_any().downcast_ref().unwrap();
 
-            panic!(
-                "{} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"!",
+            // The receiver is a real, tracked object but neither it nor any of
+            // its superclasses implement this selector. A real device would call
+            // the forwarding machinery and ultimately raise
+            // `doesNotRecognizeSelector:` (an NSInvalidArgumentException) — it does
+            // NOT crash the host. Some apps rely on that being survivable (e.g.
+            // JellyCar 3's broadcast forwarder sends `messageRx:` to every view
+            // controller, including ones that don't implement it). Rather than
+            // abort the emulator, log a warning and return nil, matching the
+            // nil-receiver / invalid-isa / untracked-class fallbacks above.
+            log!(
+                "Warning: {} {:?} ({}class \"{}\", {:?}){} does not respond to selector \"{}\"; returning nil (a real device would raise doesNotRecognizeSelector)",
                 if is_metaclass { "Class" } else { "Object" },
                 receiver,
                 if is_metaclass { "meta" } else { "" },
@@ -302,6 +311,8 @@ fn objc_msgSend_inner(
                 },
                 selector.as_str(&env.mem),
             );
+            env.cpu.regs_mut()[0..2].fill(0);
+            return;
         }
 
         let Some(host_object) = env.objc.get_host_object(class) else {
