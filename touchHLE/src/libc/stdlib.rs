@@ -34,6 +34,23 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
     // TODO: handle errno properly
     set_errno(env, 0);
 
+    // [jc3-diag] Sample the guest caller periodically. During the post-FMOD
+    // runaway allocation loop the same LR repeats, identifying the looping
+    // guest function (map LR via the binary's symbol table).
+    {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n % 100_000 == 0 {
+            log!(
+                "[jc3-diag] malloc sample #{} size={:#x} guest caller LR={:#x}",
+                n,
+                size,
+                env.cpu.regs()[crate::cpu::Cpu::LR]
+            );
+        }
+    }
+
     env.mem.alloc(size)
 }
 
