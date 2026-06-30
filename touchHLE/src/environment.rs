@@ -481,6 +481,48 @@ impl Environment {
                 env.with_yielder(yielder, move |env| {
                     echo!("CPU emulation begins now.");
 
+                    // [jc3-fix] JellyCar 3 only: FMOD's audio init
+                    // (FMOD::SystemI::init @ 0x1b7914) fails under touchHLE
+                    // (an internal FMOD memory pool is exhausted during the
+                    // software-mixer setup, returning FMOD_ERR_MEMORY). The game's
+                    // Walaber::SoundManager::init only loads sounds.xml — which
+                    // populates the music-name vector and sets its "initialized"
+                    // flag — *inside* the `if (System::init == 0)` block. On
+                    // failure that block is skipped, leaving the music vector
+                    // empty; the main menu then reads it out of bounds, producing
+                    // a corrupted std::string whose garbage length drives a
+                    // runaway vector<string> push_back loop (infinite heap growth).
+                    //
+                    // We replace SystemI::init with a stub that marks the FMOD
+                    // system initialized (this[0x11] = 1) and returns FMOD_OK, so
+                    // SoundManager takes the success path and loads the sound/
+                    // music names (these are just XML strings; real audio is not
+                    // required for the menu to build). Result: JC3 renders/plays,
+                    // silently. Audio is a separate follow-up.
+                    //   Thumb stub @ 0x1b7914:
+                    //     movs r1,#1          ; 0x2101
+                    //     strb r1,[r0,#0x11]  ; 0x7441   (r0 = SystemI* this)
+                    //     movs r0,#0          ; 0x2000   (FMOD_OK)
+                    //     bx   lr             ; 0x4770
+                    if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
+                        use crate::mem::{MutPtr, Ptr};
+                        let stub: [(u32, u16); 4] = [
+                            (0x1b7914, 0x2101),
+                            (0x1b7916, 0x7441),
+                            (0x1b7918, 0x2000),
+                            (0x1b791a, 0x4770),
+                        ];
+                        for (addr, hw) in stub {
+                            let p: MutPtr<u16> = Ptr::from_bits(addr);
+                            env.mem.write(p, hw);
+                        }
+                        env.cpu.invalidate_cache_range(0x1b7914, 8);
+                        log!(
+                            "Applied JellyCar 3 FMOD System::init success stub at 0x1b7914 \
+                             (audio disabled; menu/render enabled)"
+                        );
+                    }
+
                     // Some apps use the stack inside the static initializer.
                     // While properly behaving apps should be fine, some app
                     // will try to poke the top of the stack, so we'll give
