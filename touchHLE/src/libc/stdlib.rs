@@ -34,20 +34,33 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    // [jc3-diag] Sample the guest caller periodically. During the post-FMOD
-    // runaway allocation loop the same LR repeats, identifying the looping
-    // guest function (map LR via the binary's symbol table).
+    // [jc3-diag] Sample periodically and unwind the ARM frame-pointer (r7)
+    // chain to find the *game-side* caller (the immediate LR is libstdc++).
+    // During the post-FMOD runaway loop this chain is constant and reveals the
+    // looping JellyCar3 function (__text < 0x337000); map it via the symbol
+    // table.
     {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static N: AtomicUsize = AtomicUsize::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
         if n % 100_000 == 0 {
-            log!(
-                "[jc3-diag] malloc sample #{} size={:#x} guest caller LR={:#x}",
-                n,
-                size,
-                env.cpu.regs()[crate::cpu::Cpu::LR]
-            );
+            let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
+            let mut chain = format!("size={:#x} LR={:#x} frames=[", size, lr);
+            let mut fp = env.cpu.regs()[7];
+            for _ in 0..12 {
+                if fp == 0 || fp & 3 != 0 {
+                    break;
+                }
+                let ret: u32 = env.mem.read(crate::mem::Ptr::from_bits(fp + 4));
+                chain.push_str(&format!("{:#x} ", ret));
+                let next: u32 = env.mem.read(crate::mem::Ptr::from_bits(fp));
+                if next <= fp {
+                    break;
+                }
+                fp = next;
+            }
+            chain.push(']');
+            log!("[jc3-diag] malloc sample #{} {}", n, chain);
         }
     }
 
