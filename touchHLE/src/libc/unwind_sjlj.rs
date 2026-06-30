@@ -452,6 +452,62 @@ fn _ZNSsC2EPKcRKSaIcE(
     string_from_cstr_nullsafe(env, this, s, alloc, "__ZNSsC2EPKcRKSaIcE")
 }
 
+/// Shim for the `std::string(const std::string&)` copy constructor
+/// (`_ZNSsC1ERKSs` / `_ZNSsC2ERKSs`). JellyCar 3's
+/// `Walaber::Widget_MovingTextBox::drawMe` copies a `std::string` whose internal
+/// length is garbage (corrupted from uninitialized/faked state), so libstdc++'s
+/// copy ctor → `_M_clone` → `_S_create` throws `std::length_error`, which the
+/// app doesn't catch and aborts. If the source's `_Rep` looks corrupt (near-NULL
+/// data pointer or absurd length), we build an empty string in `this` instead,
+/// matching the `append`/`reserve` clamps above.
+fn string_copy_ctor_safe(
+    env: &mut Environment,
+    this: MutVoidPtr,
+    other: MutVoidPtr,
+    symbol: &'static str,
+) {
+    // libstdc++ COW layout: visible object holds the data pointer at offset 0;
+    // _Rep::_M_length is at data_ptr - 12.
+    let data_ptr: u32 = env.mem.read(Ptr::<u32, false>::from_bits(other.to_bits()));
+    let corrupted = if data_ptr < 0x1000 {
+        true
+    } else {
+        let length: u32 = env
+            .mem
+            .read(Ptr::<u32, false>::from_bits(data_ptr.wrapping_sub(12)));
+        length > 256 * 1024 * 1024
+    };
+    if corrupted {
+        log!(
+            "Note: std::string copy-ctor from corrupted string @ {:?} via {} — \
+             substituting \"\" (touchHLE length_error-safety shim)",
+            other,
+            symbol
+        );
+        // Build an empty string in `this` using the real const-char* ctor (the
+        // allocator arg is a stateless std::allocator<char>; any readable ptr
+        // works).
+        let empty_cstr: ConstPtr<u8> =
+            Ptr::from_bits(env.mem.alloc_and_write_cstr(b"").to_bits());
+        let dummy_alloc: ConstVoidPtr = env.mem.alloc(1).cast_const();
+        let real_ctor = resolve_guest_export(env, "__ZNSsC1EPKcRKSaIcE");
+        let _: () = real_ctor.call_from_host(env, (this, empty_cstr, dummy_alloc));
+        return;
+    }
+    let real = resolve_guest_export(env, symbol);
+    let _: () = real.call_from_host(env, (this, other));
+}
+
+#[allow(non_snake_case)]
+fn _ZNSsC1ERKSs(env: &mut Environment, this: MutVoidPtr, other: MutVoidPtr) {
+    string_copy_ctor_safe(env, this, other, "__ZNSsC1ERKSs")
+}
+
+#[allow(non_snake_case)]
+fn _ZNSsC2ERKSs(env: &mut Environment, this: MutVoidPtr, other: MutVoidPtr) {
+    string_copy_ctor_safe(env, this, other, "__ZNSsC2ERKSs")
+}
+
 // TEMPORARY DIAGNOSTIC: intercept the guest's sqlite3 SQL-prep calls, log the SQL
 // string, then forward to the real guest libsqlite3 (host functions take link
 // precedence over the dylib export, but the dylib's own copy is still callable at
@@ -569,6 +625,9 @@ pub const FUNCTIONS: FunctionExports = &[
     // NULL-tolerant std::string(const char*, allocator) — see above.
     export_c_func!(_ZNSsC1EPKcRKSaIcE(_, _, _)),
     export_c_func!(_ZNSsC2EPKcRKSaIcE(_, _, _)),
+    // length_error-safe std::string copy constructor — see string_copy_ctor_safe.
+    export_c_func!(_ZNSsC1ERKSs(_, _)),
+    export_c_func!(_ZNSsC2ERKSs(_, _)),
     // TEMP DIAGNOSTIC: log SQL passed to guest sqlite, then forward to the real one.
     export_c_func!(sqlite3_prepare_v2(_, _, _, _, _)),
     export_c_func!(sqlite3_prepare(_, _, _, _, _)),
