@@ -125,14 +125,6 @@ pub const CLASSES: ClassExports = objc_classes! {
                     }
                 }
             }
-            // Re-call startAnimation on the target after layout — the first
-            // call happened before the EAGLContext existed, so _animating wasn't
-            // set. Now that createFramebuffer ran (from layoutSubviews above),
-            // the context exists and startAnimation will set the flag.
-            if env.objc.object_has_method_named(&env.mem, target, "startAnimation") {
-                let sel = env.objc.lookup_selector("startAnimation").unwrap();
-                () = msg_send(env, (target, sel));
-            }
         }
     }
     // Signature is `- (void) selector:(CADisplayLink *)sender;`
