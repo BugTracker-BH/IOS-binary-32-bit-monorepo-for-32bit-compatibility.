@@ -569,6 +569,50 @@ unsafe fn read_renderbuffer(gles: &mut dyn GLES, mut pixel_buffer: Vec<u8>) -> (
     // Restore the framebuffer binding
     gles.BindFramebufferOES(gles11::FRAMEBUFFER_OES, old_framebuffer);
 
+    // [jc3-gl] Sample the readback so we can tell "buffer has content but the
+    // present loses it" from "buffer is genuinely blank". Count non-white and
+    // non-uniform pixels over a stride, and report the centre pixel.
+    {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 8 && pixel_buffer.len() >= 4 {
+            let mut non_white = 0u32;
+            let mut distinct = std::collections::HashSet::new();
+            let mut i = 0;
+            while i + 3 < pixel_buffer.len() {
+                let px = (
+                    pixel_buffer[i],
+                    pixel_buffer[i + 1],
+                    pixel_buffer[i + 2],
+                    pixel_buffer[i + 3],
+                );
+                if !(px.0 == 0xff && px.1 == 0xff && px.2 == 0xff) {
+                    non_white += 1;
+                }
+                if distinct.len() < 8 {
+                    distinct.insert(px);
+                }
+                i += 4 * 97; // sparse stride
+            }
+            let center = (height_u32 / 2 * width_u32 + width_u32 / 2) as usize * 4;
+            let cpx = if center + 3 < pixel_buffer.len() {
+                (
+                    pixel_buffer[center],
+                    pixel_buffer[center + 1],
+                    pixel_buffer[center + 2],
+                    pixel_buffer[center + 3],
+                )
+            } else {
+                (0, 0, 0, 0)
+            };
+            log!(
+                "[jc3-gl] readback #{} {}x{}: non_white(sampled)={} center_rgba={:?} distinct≈{:?}",
+                n, width_u32, height_u32, non_white, cpx, distinct
+            );
+        }
+    }
+
     (pixel_buffer, width_u32, height_u32)
 }
 
