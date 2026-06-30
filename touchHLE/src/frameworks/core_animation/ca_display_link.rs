@@ -102,6 +102,23 @@ pub const CLASSES: ClassExports = objc_classes! {
         // but just not passing the actual call.
         return;
     }
+    // One-shot: on the very first fire, trigger layoutSubviews on the target's
+    // view (if it has one). This is how JellyCar 3's EAGLView gets its
+    // createFramebuffer called — it needs to happen after game init is done
+    // (not during addSubview, which is too early and crashes JC1). Since JC1
+    // doesn't use CADisplayLink, this path is JC1-safe.
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static LAYOUT_DONE: AtomicBool = AtomicBool::new(false);
+        if !LAYOUT_DONE.swap(true, Ordering::Relaxed) {
+            if env.objc.object_has_method_named(&env.mem, target, "view") {
+                let view: id = msg![env; target view];
+                if view != nil {
+                    () = msg![env; view layoutSubviews];
+                }
+            }
+        }
+    }
     // Signature is `- (void) selector:(CADisplayLink *)sender;`
     () = msg_send(env, (target, selector.unwrap(), this));
 }
