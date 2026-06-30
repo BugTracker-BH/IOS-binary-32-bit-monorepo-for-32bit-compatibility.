@@ -668,6 +668,19 @@ impl Mem {
         let (vm, heap) = self.allocators_mut(heap);
         let size = heap.free(vm, ptr.to_bits());
 
+        // [jc3-diag] size == 0 means the allocator did not recognise this
+        // pointer (it also prints "Can't free … unknown allocation"). This is
+        // the JellyCar 3 / FMOD corruption (e.g. 0x7461736b = "task"). Capture a
+        // host backtrace so we can see exactly which touchHLE shim called free()
+        // with the bogus pointer. Fires only on genuinely-unknown frees.
+        if size == 0 {
+            log!(
+                "[jc3-diag] free_in_heap UNKNOWN allocation {:#x}; host backtrace:\n{}",
+                ptr.to_bits(),
+                std::backtrace::Backtrace::force_capture()
+            );
+        }
+
         if size > HeapAllocator::HEAP_ALLOCATION_THRESHOLD {
             // VM allocations are always 0 initialized.
             // TODO: Can this be done with vm_advise/equivalents

@@ -84,20 +84,7 @@ fn free(env: &mut Environment, ptr: MutVoidPtr) {
         // "If ptr is a NULL pointer, no operation is performed."
         return;
     }
-    // [jc3-diag] If the pointer is not a known heap allocation, something handed
-    // the engine/FMOD code a bogus value (e.g. 0x7461736b = "task") that it
-    // later passed to free(). Log the guest caller (LR) so the offending host
-    // shim can be identified by mapping LR via the binary's symbol table. This
-    // fires only for genuinely-unknown frees, so it is silent in normal use.
-    let lr = env.cpu.regs()[crate::cpu::Cpu::LR];
-    let freed = env.mem.free(ptr);
-    if freed == 0 {
-        log!(
-            "[jc3-diag] free() of UNKNOWN allocation {:#x} — guest caller LR={:#x}",
-            ptr.to_bits(),
-            lr
-        );
-    }
+    env.mem.free(ptr);
 }
 
 fn atexit(
