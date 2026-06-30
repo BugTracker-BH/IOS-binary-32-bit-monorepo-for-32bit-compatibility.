@@ -102,18 +102,33 @@ pub const CLASSES: ClassExports = objc_classes! {
         // but just not passing the actual call.
         return;
     }
-    // One-shot: on the very first fire, trigger layoutSubviews on all views.
-    // This is how JellyCar 3's EAGLView gets its createFramebuffer called —
-    // it needs to happen after game init is done (not during addSubview, which
-    // is too early and crashes JC1). Since JC1 doesn't use CADisplayLink, this
-    // path is JC1-safe.
+    // One-shot: on the very first fire, trigger layoutSubviews on the key
+    // window's view hierarchy. This is how JellyCar 3's EAGLView gets its
+    // createFramebuffer called — it needs to happen after game init is done
+    // (not during addSubview, which is too early and crashes JC1). Since JC1
+    // doesn't use CADisplayLink, this path is JC1-safe. We use ObjC messages
+    // (not the host `views` vec) because EAGLView is a guest-defined class.
     {
         use std::sync::atomic::{AtomicBool, Ordering};
         static LAYOUT_DONE: AtomicBool = AtomicBool::new(false);
         if !LAYOUT_DONE.swap(true, Ordering::Relaxed) {
-            let views = env.framework_state.uikit.ui_view.views.clone();
-            for view in views {
-                () = msg![env; view layoutSubviews];
+            let app: id = msg_class![env; UIApplication sharedApplication];
+            let window: id = msg![env; app keyWindow];
+            if window != nil {
+                // Get subviews and call layoutSubviews on each (including EAGLView)
+                let subviews: id = msg![env; window subviews];
+                let count: u32 = msg![env; subviews count];
+                for i in 0..count {
+                    let subview: id = msg![env; subviews objectAtIndex:i];
+                    () = msg![env; subview layoutSubviews];
+                    // Also check one level deeper (EAGLView may be a subview of the VC's view)
+                    let inner_subviews: id = msg![env; subview subviews];
+                    let inner_count: u32 = msg![env; inner_subviews count];
+                    for j in 0..inner_count {
+                        let inner: id = msg![env; inner_subviews objectAtIndex:j];
+                        () = msg![env; inner layoutSubviews];
+                    }
+                }
             }
         }
     }
