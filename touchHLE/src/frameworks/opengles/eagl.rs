@@ -25,15 +25,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-/// [jc3] When set, the EAGL `presentRenderbuffer:` always presents the bound
-/// renderbuffer directly to the window (the "fast path"), and the Core Animation
-/// compositor is skipped. JellyCar 3's CAEAGLLayer is orphaned (never parented
-/// into the visible window's layer tree), so the compositor never draws it and
-/// the screen stays white even though the menu renders correctly into the
-/// renderbuffer. Direct-presenting the renderbuffer puts that content on screen.
-pub static JC3_DIRECT_EAGL_PRESENT: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
 // These are used by the EAGLDrawable protocol implemented by CAEAGLayer.
 // Since these have the ABI of constant symbols rather than literal constants,
 // the values shouldn't matter, and haven't been checked against real iPhone OS.
@@ -297,7 +288,7 @@ pub const CLASSES: ClassExports = objc_classes! {
     // straight to the window and let the compositor be skipped (see
     // JC3_DIRECT_EAGL_PRESENT). Without this, JC3's menu renders into a layer the
     // compositor never visits, leaving the window white.
-    if JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+    if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
         unsafe {
             present_renderbuffer(env);
         }

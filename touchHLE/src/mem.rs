@@ -27,6 +27,14 @@ use crate::mem::allocator::VMAllocator;
 /// so we can detect when that live object is prematurely freed/reused. 0 = off.
 pub static JC3_WATCH_ADDR: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+/// [jc3] When set, EAGL `presentRenderbuffer:` presents the bound renderbuffer
+/// directly to the window and the Core Animation compositor is skipped. JC3's
+/// CAEAGLLayer is orphaned (never parented into the visible window), so the
+/// compositor never draws it; direct presentation puts the rendered menu on
+/// screen instead of leaving it white.
+pub static JC3_DIRECT_EAGL_PRESENT: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Equivalent of `usize` for guest memory.
 pub type GuestUSize = u32;
 
