@@ -113,4 +113,12 @@ macro_rules! echo_no_panic {
 
 /// Put modules to enable [log_dbg] for here, e.g. "touchHLE::mem" to see when
 /// memory is allocated and freed.
-pub const ENABLED_MODULES: &[&str] = &[];
+pub const ENABLED_MODULES: &[&str] = &[
+    // [jc3-diag] Trace FMOD's audio init in detail (AudioUnit instantiation,
+    // semaphore sync, thread creation) to find why System::init fails.
+    "touchHLE::frameworks::audio_toolbox::audio_components",
+    "touchHLE::frameworks::audio_toolbox::audio_unit",
+    "touchHLE::frameworks::audio_toolbox::audio_queue",
+    "touchHLE::libc::mach::semaphore",
+    "touchHLE::libc::pthread::thread",
+];
