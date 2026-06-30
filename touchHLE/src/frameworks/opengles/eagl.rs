@@ -265,6 +265,42 @@ pub const CLASSES: ClassExports = objc_classes! {
         release(env, old_drawable);
     }
 
+    // [jc3] JellyCar 3's EAGLView is created from the nib but never parented into
+    // the window, so the Core Animation compositor never draws its layer — white
+    // on iOS (where the compositor IS the screen present) and white on desktop.
+    // Parent it into the key window here (once) so the compositor composites the
+    // renderbuffer pixels it presents — the same way JellyCar 1/2's EAGLViews are
+    // already in the window. `drawable` is the EAGLView's CAEAGLLayer; its
+    // delegate is the EAGLView itself (UIView sets layer.delegate = self).
+    if crate::mem::JC3_DIRECT_EAGL_PRESENT.load(std::sync::atomic::Ordering::Relaxed) {
+        let eaglview: id = msg![env; drawable delegate];
+        if eaglview != nil {
+            let superview: id = msg![env; eaglview superview];
+            if superview == nil {
+                let windows = env.framework_state.uikit.ui_view.ui_window.windows.clone();
+                let mut keywin: id = nil;
+                for &w in windows.iter().rev() {
+                    let hidden: bool = msg![env; w isHidden];
+                    if !hidden {
+                        keywin = w;
+                        break;
+                    }
+                }
+                if keywin != nil {
+                    let bounds: CGRect = msg![env; keywin bounds];
+                    () = msg![env; eaglview setFrame:bounds];
+                    () = msg![env; keywin addSubview:eaglview];
+                    log!(
+                        "[jc3] parented orphaned EAGLView {:?} into key window {:?} \
+                         so the compositor draws it",
+                        eaglview,
+                        keywin
+                    );
+                }
+            }
+        }
+    }
+
     true
 }
 
