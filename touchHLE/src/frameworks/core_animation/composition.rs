@@ -85,6 +85,16 @@ pub fn recomposite_if_necessary(env: &mut Environment, force: bool) -> Option<In
         return None;
     }
 
+    // [jc3] When JC3 direct-EAGL-present is active, the EAGL renderbuffer is
+    // presented straight to the window and the menu's CAEAGLLayer is orphaned
+    // (not in this tree). Running the compositor would just overwrite the screen
+    // with the EAGL-less window tree (white), so skip it.
+    if crate::frameworks::opengles::eagl::JC3_DIRECT_EAGL_PRESENT
+        .load(std::sync::atomic::Ordering::Relaxed)
+    {
+        return None;
+    }
+
     if env.options.print_fps {
         env.framework_state
             .core_animation

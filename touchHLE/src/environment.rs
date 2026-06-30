@@ -507,6 +507,14 @@ impl Environment {
                     if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
                         use crate::mem::{MutPtr, Ptr};
 
+                        // JC3's CAEAGLLayer is orphaned (never parented into the
+                        // visible window), so the compositor never draws it and the
+                        // menu — though rendered correctly into the renderbuffer —
+                        // stays invisible. Switch to direct EAGL renderbuffer
+                        // presentation (and skip the compositor) so it shows.
+                        crate::frameworks::opengles::eagl::JC3_DIRECT_EAGL_PRESENT
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+
                         // Allocate one zeroed dummy FMOD Sound object. createSound/
                         // createStream hand this back so the game gets a NON-NULL
                         // Sound* whose fields all read as zero. Non-null keeps the
