@@ -117,6 +117,14 @@ pub const CLASSES: ClassExports = objc_classes! {
                 if view != nil {
                     log!("[jc3-layout] Triggering layoutSubviews on target's view {:?}", view);
                     () = msg![env; view layoutSubviews];
+                    // EAGLView is likely a subview of the VC's root view
+                    let subviews: id = msg![env; view subviews];
+                    let count: u32 = msg![env; subviews count];
+                    for i in 0..count {
+                        let sv: id = msg![env; subviews objectAtIndex:i];
+                        log!("[jc3-layout] target.view.subview[{}] = {:?}", i, sv);
+                        () = msg![env; sv layoutSubviews];
+                    }
                 }
             }
             // Also try the key window's subviews (two levels deep).
