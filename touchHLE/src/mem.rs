@@ -652,13 +652,19 @@ impl Mem {
     }
 
     /// Free allocations made with non vm prefixed `alloc` methods on
-    /// this type in the default heap.
-    pub fn free(&mut self, ptr: MutVoidPtr) {
-        self.free_in_heap(None, ptr);
+    /// this type in the default heap. Returns the size of the freed chunk, or
+    /// 0 if `ptr` was not a known allocation.
+    pub fn free(&mut self, ptr: MutVoidPtr) -> GuestUSize {
+        self.free_in_heap(None, ptr)
     }
 
     /// Free an allocation made with one of the `alloc` methods in `heap`.
-    pub fn free_in_heap(&mut self, heap: Option<&mut HeapAllocator>, ptr: MutVoidPtr) {
+    /// Returns the size of the freed chunk, or 0 if `ptr` was not known.
+    pub fn free_in_heap(
+        &mut self,
+        heap: Option<&mut HeapAllocator>,
+        ptr: MutVoidPtr,
+    ) -> GuestUSize {
         let (vm, heap) = self.allocators_mut(heap);
         let size = heap.free(vm, ptr.to_bits());
 
@@ -671,6 +677,7 @@ impl Mem {
         }
 
         log_dbg!("Freed {:?} ({:#x} bytes)", ptr, size);
+        size
     }
 
     /// Free an allocation made with `vm_alloc` or `reserve`. All allocations
