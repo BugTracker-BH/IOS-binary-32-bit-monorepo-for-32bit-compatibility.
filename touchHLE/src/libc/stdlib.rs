@@ -34,18 +34,18 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
     // TODO: handle errno properly
     set_errno(env, 0);
 
-    // [jc3-diag] Log large allocations (>=64KB) with guest caller, to see the
-    // sizes FMOD requests during System::init (FMOD_ERR_MEMORY comes from its
-    // MemPool returning NULL for a buffer alloc). Map LR via the symbol table.
-    if size >= 0x10000 {
+    // [jc3-diag] Log allocations >=8KB and ALL null returns, with caller.
+    let ptr = env.mem.alloc(size);
+    if size >= 0x2000 || ptr.is_null() {
         log!(
-            "[jc3-diag] malloc size={:#x} guest LR={:#x}",
+            "[jc3-diag] malloc size={:#x} -> {:#x}{} LR={:#x}",
             size,
+            ptr.to_bits(),
+            if ptr.is_null() { " (NULL!)" } else { "" },
             env.cpu.regs()[crate::cpu::Cpu::LR]
         );
     }
-
-    env.mem.alloc(size)
+    ptr
 }
 
 fn malloc_size(env: &mut Environment, ptr: ConstVoidPtr) -> GuestUSize {
@@ -57,18 +57,21 @@ fn calloc(env: &mut Environment, count: GuestUSize, size: GuestUSize) -> MutVoid
     set_errno(env, 0);
 
     let total = size.checked_mul(count).unwrap();
-    // [jc3-diag] Log large calloc requests with caller — FMOD's failing
-    // MemPool::calloc (output buffer = rate*channels*blocksize*2) routes here.
-    if total >= 0x10000 {
+    // [jc3-diag] Log calloc >=8KB and ALL null returns — FMOD's MemPool::calloc
+    // (the failing audio-buffer alloc) routes here.
+    let ptr = env.mem.calloc(total);
+    if total >= 0x2000 || ptr.is_null() {
         log!(
-            "[jc3-diag] calloc total={:#x} (count={:#x} size={:#x}) guest LR={:#x}",
+            "[jc3-diag] calloc total={:#x} (count={:#x} size={:#x}) -> {:#x}{} LR={:#x}",
             total,
             count,
             size,
+            ptr.to_bits(),
+            if ptr.is_null() { " (NULL!)" } else { "" },
             env.cpu.regs()[crate::cpu::Cpu::LR]
         );
     }
-    env.mem.calloc(total)
+    ptr
 }
 
 fn valloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
