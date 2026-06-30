@@ -176,6 +176,11 @@ pub const CLASSES: ClassExports = objc_classes! {
     let orig_nss: id = msg![env; coder decodeObjectForKey:orig_key];
     let orig = to_rust_string(env, orig_nss);
 
+    log!(
+        "[nib-swap] UIClassSwapper: className={:?} originalClassName={:?}",
+        name, orig
+    );
+
     let class = env.objc.get_known_class(&name, &mut env.mem);
 
     let object: id = msg![env; class alloc];

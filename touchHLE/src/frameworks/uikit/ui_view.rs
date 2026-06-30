@@ -509,11 +509,6 @@ pub const CLASSES: ClassExports = objc_classes! {
         this_obj.subviews.push(view);
         let this_layer = this_obj.layer;
         () = msg![env; this_layer addSublayer:subview_layer];
-        // Real iOS triggers layout when a view joins the hierarchy —
-        // this is how EAGLView's layoutSubviews → createFramebuffer fires
-        // (JellyCar 3 depends on this). Safe for all apps: layoutSubviews
-        // defaults to a no-op on plain UIViews.
-        () = msg![env; view layoutSubviews];
     }
 }
 
