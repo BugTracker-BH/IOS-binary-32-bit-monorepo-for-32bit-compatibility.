@@ -481,45 +481,57 @@ impl Environment {
                 env.with_yielder(yielder, move |env| {
                     echo!("CPU emulation begins now.");
 
-                    // [jc3-fix] JellyCar 3 only: FMOD's audio init
-                    // (FMOD::SystemI::init @ 0x1b7914) fails under touchHLE
-                    // (an internal FMOD memory pool is exhausted during the
-                    // software-mixer setup, returning FMOD_ERR_MEMORY). The game's
-                    // Walaber::SoundManager::init only loads sounds.xml — which
-                    // populates the music-name vector and sets its "initialized"
-                    // flag — *inside* the `if (System::init == 0)` block. On
-                    // failure that block is skipped, leaving the music vector
-                    // empty; the main menu then reads it out of bounds, producing
-                    // a corrupted std::string whose garbage length drives a
-                    // runaway vector<string> push_back loop (infinite heap growth).
+                    // [jc3-fix] JellyCar 3 only: FMOD's audio init fails under
+                    // touchHLE (an internal FMOD memory pool is exhausted during
+                    // software-mixer setup). Walaber::SoundManager::init loads
+                    // sounds.xml — which populates the music-name vector and sets
+                    // its "initialized" flag — only inside the success path gated
+                    // behind a chain of FMOD calls (System::init, createChannelGroup,
+                    // ...). On failure that block is skipped, the music vector stays
+                    // empty, and the main menu reads it out of bounds → corrupted
+                    // std::string with a garbage length → runaway vector<string>
+                    // push_back (infinite heap growth).
                     //
-                    // We replace SystemI::init with a stub that marks the FMOD
-                    // system initialized (this[0x11] = 1) and returns FMOD_OK, so
-                    // SoundManager takes the success path and loads the sound/
-                    // music names (these are just XML strings; real audio is not
-                    // required for the menu to build). Result: JC3 renders/plays,
-                    // silently. Audio is a separate follow-up.
-                    //   Thumb stub @ 0x1b7914:
-                    //     movs r1,#1          ; 0x2101
-                    //     strb r1,[r0,#0x11]  ; 0x7441   (r0 = SystemI* this)
-                    //     movs r0,#0          ; 0x2000   (FMOD_OK)
-                    //     bx   lr             ; 0x4770
+                    // We neutralize the FMOD calls on that path so SoundManager
+                    // takes the success path and loads the sound/music NAMES (pure
+                    // XML strings; real audio output is not required for the menu).
+                    // Each stub returns FMOD_OK; output pointers are left
+                    // null/unchanged, which is safe because touchHLE zero-fills
+                    // null reads, so later playback calls are harmless no-ops.
+                    // Result: JC3 renders/plays, silently. Real audio is a follow-up;
+                    // the SystemI::init stub is the natural hook to build it later.
+                    //   - SystemI::init @ 0x1b7914: set this[0x11]=1, return FMOD_OK
+                    //       movs r1,#1 (0x2101); strb r1,[r0,#0x11] (0x7441);
+                    //       movs r0,#0 (0x2000); bx lr (0x4770)
+                    //   - the rest: `movs r0,#0; bx lr` (0x2000, 0x4770)
                     if env.bundle.bundle_identifier() == "com.disney.JellyCar3" {
                         use crate::mem::{MutPtr, Ptr};
-                        let stub: [(u32, u16); 4] = [
-                            (0x1b7914, 0x2101),
-                            (0x1b7916, 0x7441),
-                            (0x1b7918, 0x2000),
-                            (0x1b791a, 0x4770),
+                        // (start_addr, halfwords) Thumb stubs, all FMOD::System*
+                        let stubs: &[(u32, &[u16])] = &[
+                            // FMOD::SystemI::init
+                            (0x1b7914, &[0x2101, 0x7441, 0x2000, 0x4770]),
+                            // FMOD::System::getSoftwareFormat
+                            (0x1b2678, &[0x2000, 0x4770]),
+                            // FMOD::System::createChannelGroup
+                            (0x1b28bc, &[0x2000, 0x4770]),
+                            // FMOD::System::createStream
+                            (0x1b28f8, &[0x2000, 0x4770]),
+                            // FMOD::System::createSound
+                            (0x1b2944, &[0x2000, 0x4770]),
+                            // FMOD::System::setSoftwareFormat
+                            (0x1b2a34, &[0x2000, 0x4770]),
                         ];
-                        for (addr, hw) in stub {
-                            let p: MutPtr<u16> = Ptr::from_bits(addr);
-                            env.mem.write(p, hw);
+                        for &(addr, hws) in stubs {
+                            for (i, &hw) in hws.iter().enumerate() {
+                                let p: MutPtr<u16> = Ptr::from_bits(addr + (i as u32) * 2);
+                                env.mem.write(p, hw);
+                            }
+                            env.cpu.invalidate_cache_range(addr, (hws.len() * 2) as u32);
                         }
-                        env.cpu.invalidate_cache_range(0x1b7914, 8);
                         log!(
-                            "Applied JellyCar 3 FMOD System::init success stub at 0x1b7914 \
-                             (audio disabled; menu/render enabled)"
+                            "Applied JellyCar 3 FMOD bypass stubs ({} functions) \
+                             (audio disabled; menu/render enabled)",
+                            stubs.len()
                         );
                     }
 
