@@ -45,6 +45,26 @@ fn malloc(env: &mut Environment, size: GuestUSize) -> MutVoidPtr {
             env.cpu.regs()[crate::cpu::Cpu::LR]
         );
     }
+    // [jc3-diag] For the large runaway allocations (the menu-build doubling that
+    // freezes the game), walk the ARM frame-pointer (r7) chain to find the
+    // game-side caller (< 0x337000) requesting the garbage size.
+    if size >= 0x40000 {
+        let mut chain = String::new();
+        let mut fp = env.cpu.regs()[7];
+        for _ in 0..14 {
+            if fp == 0 || fp & 3 != 0 {
+                break;
+            }
+            let ret: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp + 4));
+            chain.push_str(&format!("{:#x} ", ret));
+            let next: u32 = env.mem.read(crate::mem::ConstPtr::<u32>::from_bits(fp));
+            if next <= fp {
+                break;
+            }
+            fp = next;
+        }
+        log!("[jc3-diag] BIG malloc {:#x} frames=[{}]", size, chain);
+    }
     ptr
 }
 
