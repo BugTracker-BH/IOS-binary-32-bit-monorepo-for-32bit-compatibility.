@@ -478,12 +478,21 @@ fn string_copy_ctor_safe(
         length > 256 * 1024 * 1024
     };
     if corrupted {
-        log!(
-            "Note: std::string copy-ctor from corrupted string @ {:?} via {} — \
-             substituting \"\" (touchHLE length_error-safety shim)",
-            other,
-            symbol
-        );
+        // Rate-limit: this fires every frame for JC3's news-ticker widget
+        // (Widget_MovingTextBox redraws its corrupted string each frame), which
+        // would otherwise flood the log and slow the emulator.
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        if n < 5 || n % 100000 == 0 {
+            log!(
+                "Note: std::string copy-ctor from corrupted string @ {:?} via {} — \
+                 substituting \"\" (touchHLE length_error-safety shim) [x{}]",
+                other,
+                symbol,
+                n + 1
+            );
+        }
         // Build an empty string in `this` using the real const-char* ctor (the
         // allocator arg is a stateless std::allocator<char>; any readable ptr
         // works).
