@@ -528,20 +528,6 @@ impl Environment {
                             let p: MutPtr<u32> = Ptr::from_bits(d + i * 4);
                             env.mem.write(p, 0u32);
                         }
-                        // Non-null zeroed dummy FMOD::System, returned by
-                        // FMOD_System_Create so JC3's SoundManager::init reaches
-                        // the SUCCESS path. This matters on-device: when init
-                        // succeeds the game runs its full startup and the menu
-                        // renders; when it fails (FMOD not forced) JC3 short-
-                        // circuits and the iOS build renders a blank menu. (Music
-                        // and SFX come from our own OpenAL hooks, independent of
-                        // this — FMOD playback itself stays stubbed/silent.)
-                        let dummy_system = env.mem.alloc(0x400);
-                        let sys = dummy_system.to_bits();
-                        for i in 0..0x100u32 {
-                            let p: MutPtr<u32> = Ptr::from_bits(sys + i * 4);
-                            env.mem.write(p, 0u32);
-                        }
                         // Thumb stub for createSound/createStream: write the dummy
                         // pointer to the output Sound** (5th arg, on the stack) and
                         // return FMOD_OK.
@@ -569,18 +555,6 @@ impl Environment {
                             (0x1b7914, vec![0x2101, 0x7441, 0x2000, 0x4770]),
                             // FMOD::System::getSoftwareFormat -> FMOD_OK
                             (0x1b2678, vec![0x2000, 0x4770]),
-                            // FMOD::System::getVersion @ 0x1b2990 (the one
-                            // SoundManager::init calls): write *version = 0x43307
-                            // (game requires > 0x43306), return FMOD_OK.
-                            //   ldr r0,[pc,#4] (0x4801); str r0,[r1] (0x6008);
-                            //   movs r0,#0 (0x2000); bx lr (0x4770); .word 0x43307
-                            (
-                                0x1b2990,
-                                vec![0x4801, 0x6008, 0x2000, 0x4770, 0x3307, 0x0004],
-                            ),
-                            // FMOD::System::init @ 0x1b29f0 -> FMOD_OK (drives the
-                            // init success path; see dummy_system comment above).
-                            (0x1b29f0, vec![0x2000, 0x4770]),
                             // FMOD::System::createChannelGroup -> FMOD_OK (output in r2
                             // already points at a zero-inited field; safe to leave)
                             (0x1b28bc, vec![0x2000, 0x4770]),
@@ -599,17 +573,6 @@ impl Environment {
                             // offline): patch the `[… count]` msgSend @ 0xbf0fc to
                             // `movs r0,#0; nop`.
                             (0xbf0fc, vec![0x2000, 0xbf00]),
-                            // restoreGameThread() @ 0xbfacc: on launch the game
-                            // tries to resume a saved in-progress level by
-                            // deserializing a boost binary archive
-                            // (BinaryReader). touchHLE can't deserialize JC3's
-                            // boost archive, so it throws an uncaught
-                            // archive_exception and panics. Stub it to return
-                            // immediately (`movs r0,#0; bx lr`) — identical to the
-                            // known-good "no save present" path, so the game just
-                            // starts fresh at the menu instead of crashing. Only
-                            // mid-level resume is lost; other progress is separate.
-                            (0xbfacc, vec![0x2000, 0x4770]),
                         ];
                         for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
@@ -619,35 +582,14 @@ impl Environment {
                             env.cpu.invalidate_cache_range(*addr, (hws.len() * 2) as u32);
                         }
 
-                        // FMOD_System_Create @ 0x140fec is ARM code (called via
-                        // `blx` from Thumb -> ARM state), so it needs an ARM stub.
-                        // It takes an out `FMOD::System**` in r0; write the dummy
-                        // system there and return FMOD_OK so Create succeeds and
-                        // init proceeds down the success path (see dummy_system).
-                        //   ldr r12,[pc,#8]; str r12,[r0]; mov r0,#0; bx lr; .word sys
-                        let create_arm: [u32; 5] = [
-                            0xe59fc008, 0xe580c000, 0xe3a00000, 0xe12fff1e, sys,
-                        ];
-                        for (i, &w) in create_arm.iter().enumerate() {
-                            let p: MutPtr<u32> = Ptr::from_bits(0x140fec + (i as u32) * 4);
-                            env.mem.write(p, w);
-                        }
-                        env.cpu.invalidate_cache_range(0x140fec, 20);
-
                         log!(
-                            "Applied JellyCar 3 FMOD init-forcing + bypass stubs \
-                             (dummy Sound @ {:#x}, dummy System @ {:#x}); \
-                             restoreGameThread stubbed; audio via OpenAL hooks",
-                            d,
-                            sys
+                            "Applied JellyCar 3 FMOD bypass stubs (dummy Sound @ {:#x})",
+                            d
                         );
 
-                        // Audio bridge: route JC3 audio (music + SFX) through OpenAL,
-                        // via SoundManager::playMusic / playSoundFromGroup hooks and
-                        // our own sounds.xml parse. Independent of FMOD (playback
-                        // stays stubbed); FMOD init is forced above only so the game
-                        // completes its full startup and the menu renders on-device.
-                        crate::frameworks::jc3_audio::install_audio_hooks(env);
+                        // Play JC3's background music through OpenAL by hooking
+                        // SoundManager::playMusic. (FMOD stays stubbed/silent.)
+                        crate::frameworks::jc3_audio::install_music_hook(env);
                     }
 
                     // Some apps use the stack inside the static initializer.

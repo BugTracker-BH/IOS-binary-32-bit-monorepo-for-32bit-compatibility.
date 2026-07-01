@@ -3,25 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! JellyCar 3 audio shim (music + SFX), routed through touchHLE's OpenAL stack.
-//!
-//! FMOD fails to initialise under the emulator and JC3 disables its sound
-//! system as a result. Rather than force FMOD init to "succeed" (which pushes
-//! the game into an unhandled boost save-restore path and crashes), we bypass
-//! the sound system entirely at a high level:
-//!
-//! * **Music:** hook `SoundManager::playMusic(int)` @ 0x101aac -> play
-//!   `Content/Audio/Music/song<N>.mp3` looped.
-//! * **SFX:** hook `SoundManager::playSoundFromGroup(int group, float vol)` @
-//!   0x102434. The game calls this for one-shot effects (impacts, UI, win/lose,
-//!   pickups, sproing, inflate/deflate) from gameplay code, independent of the
-//!   (failed) FMOD system. We parse `Content/Audio/sounds.xml` ourselves to map
-//!   group id -> wav files, pick one, and play it through OpenAL.
-//!
-//! Looping effects (engine/sticky/marker) go through the FMOD instance path,
-//! which is dead without FMOD, so they are not covered here.
-//!
-//! Nothing in this module runs for any app other than `com.disney.JellyCar3`.
+//! JellyCar 3 music shim — plays the game's background music through touchHLE's
+//! OpenAL stack by hooking `Walaber::SoundManager::playMusic(int track)` at
+//! guest address `0x101aac`. JC3-only; installed from the JC3-gated init block
+//! in `environment.rs`.
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::*;
@@ -30,70 +15,27 @@ use crate::dyld::HostFunction;
 use crate::fs::GuestPathBuf;
 use crate::mem::{MutPtr, Ptr};
 use crate::Environment;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 /// `Walaber::SoundManager::playMusic(int)` (Thumb).
 const PLAY_MUSIC_ADDR: u32 = 0x101aac;
-/// `Walaber::SoundManager::playSoundFromGroup(int group, float vol)` (Thumb).
-const PLAY_SOUND_FROM_GROUP_ADDR: u32 = 0x102434;
 
 /// Standard OpenAL 1.1 enum values not re-exported by openal_soft_wrapper.
 const AL_LOOPING: ALenum = 0x1007;
 const AL_GAIN: ALenum = 0x100A;
 
-// --- Music state (single looping source) ---
+/// Currently playing music source / buffer (0 = none), and track (-1 = none).
 static CUR_SOURCE: AtomicU32 = AtomicU32::new(0);
 static CUR_BUFFER: AtomicU32 = AtomicU32::new(0);
 static CUR_TRACK: AtomicI32 = AtomicI32::new(-1);
 
-// --- SFX state ---
-/// group id -> wav files (relative paths from sounds.xml, e.g. "Audio/Impact/hit1.wav").
-static GROUP_FILES: OnceLock<HashMap<i32, Vec<String>>> = OnceLock::new();
-/// filename -> decoded (pcm, format, sample_rate), so repeated hits don't re-decode.
-fn pcm_cache() -> &'static Mutex<HashMap<String, (Vec<u8>, ALenum, ALsizei)>> {
-    static S: OnceLock<Mutex<HashMap<String, (Vec<u8>, ALenum, ALsizei)>>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(HashMap::new()))
-}
-/// Currently-playing one-shot (source, buffer) pairs, reaped when finished.
-fn sfx_pool() -> &'static Mutex<Vec<(ALuint, ALuint)>> {
-    static S: OnceLock<Mutex<Vec<(ALuint, ALuint)>>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(Vec::new()))
-}
-static RNG: AtomicU32 = AtomicU32::new(0x1234_5678);
-
-fn next_rand() -> u32 {
-    let mut x = RNG.load(Ordering::Relaxed);
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    RNG.store(x, Ordering::Relaxed);
-    x
-}
-
-/// Install JC3 audio hooks. Call once, only for `com.disney.JellyCar3`.
-pub fn install_audio_hooks(env: &mut Environment) {
-    let _ = GROUP_FILES.set(parse_sound_groups(env));
-
+/// Install the JC3 music hook. Call once, only for `com.disney.JellyCar3`.
+pub fn install_music_hook(env: &mut Environment) {
     let music: HostFunction = &(jc3_play_music as fn(&mut Environment));
     patch_thumb_hook(env, PLAY_MUSIC_ADDR, "__touchHLE_JC3PlayMusic", music);
-
-    let sfx: HostFunction = &(jc3_play_sound_from_group as fn(&mut Environment));
-    patch_thumb_hook(
-        env,
-        PLAY_SOUND_FROM_GROUP_ADDR,
-        "__touchHLE_JC3PlaySoundFromGroup",
-        sfx,
-    );
-
-    let groups = GROUP_FILES.get().map(|g| g.len()).unwrap_or(0);
     log!(
-        "Installed JellyCar 3 audio hooks (music @ {:#x}, SFX playSoundFromGroup @ {:#x}, \
-         {} sound groups parsed from sounds.xml)",
-        PLAY_MUSIC_ADDR,
-        PLAY_SOUND_FROM_GROUP_ADDR,
-        groups
+        "Installed JellyCar 3 music hook (playMusic @ {:#x})",
+        PLAY_MUSIC_ADDR
     );
 }
 
@@ -103,8 +45,7 @@ pub fn install_audio_hooks(env: &mut Environment) {
 ///   ldr r3, [pc, #0]   ; 0x4b00
 ///   bx  r3             ; 0x4718
 ///   .word stub_addr
-/// r3 is caller-clobbered under AAPCS; r0-r2 (all inputs our shims read) are
-/// preserved.
+/// r3 is caller-clobbered under AAPCS; r0/r1 (the shim's inputs) are preserved.
 fn patch_thumb_hook(env: &mut Environment, addr: u32, symbol: &'static str, hf: HostFunction) {
     let stub = env.dyld.create_guest_function(&mut env.mem, symbol, hf);
     let stub_addr = stub.addr_without_thumb_bit();
@@ -115,134 +56,7 @@ fn patch_thumb_hook(env: &mut Environment, addr: u32, symbol: &'static str, hf: 
     let p2: MutPtr<u32> = Ptr::from_bits(addr + 4);
     env.mem.write(p2, stub_addr);
     env.cpu.invalidate_cache_range(addr, 8);
-    log_dbg!("JC3 audio: hooked {:#x} -> host trampoline {:#x}", addr, stub_addr);
-}
-
-/// Host `SoundManager::playSoundFromGroup(int group, float vol)`.
-/// ABI: r0 = this (unused), r1 = group id, r2 = volume (float bits, softfp).
-fn jc3_play_sound_from_group(env: &mut Environment) {
-    let group = env.cpu.regs()[1] as i32;
-    let vol = f32::from_bits(env.cpu.regs()[2]);
-    let vol = if vol.is_finite() { vol.clamp(0.0, 1.0) } else { 1.0 };
-    if vol <= 0.0 {
-        return;
-    }
-
-    // Pick a wav from the group (mirrors the game's random selection).
-    let name = {
-        let Some(files) = GROUP_FILES.get().and_then(|g| g.get(&group)) else {
-            return;
-        };
-        if files.is_empty() {
-            return;
-        }
-        files[(next_rand() as usize) % files.len()].clone()
-    };
-
-    // Decode (cached).
-    if !pcm_cache().lock().unwrap().contains_key(&name) {
-        let Some(path) = resolve_sound_path(env, &name) else {
-            log!("JC3 SFX: file not found for {:?}", name);
-            return;
-        };
-        match load_pcm(env, &path) {
-            Some(dec) => {
-                pcm_cache().lock().unwrap().insert(name.clone(), dec);
-            }
-            None => return,
-        }
-    }
-
-    let context = env
-        .framework_state
-        .audio_toolbox
-        .make_al_context_current(env.openal_manager.as_mut());
-    unsafe {
-        // Reap finished one-shots.
-        let mut pool = sfx_pool().lock().unwrap();
-        let mut i = 0;
-        while i < pool.len() {
-            let (s, b) = pool[i];
-            let mut state: ALint = 0;
-            context.GetSourcei(s, al::AL_SOURCE_STATE, &mut state);
-            if state != al::AL_PLAYING {
-                context.DeleteSources(1, &s);
-                context.DeleteBuffers(1, &b);
-                pool.remove(i);
-            } else {
-                i += 1;
-            }
-        }
-
-        let cache = pcm_cache().lock().unwrap();
-        let (pcm, fmt, rate) = cache.get(&name).unwrap();
-        let mut buffer: ALuint = 0;
-        context.GenBuffers(1, &mut buffer);
-        context.BufferData(
-            buffer,
-            *fmt,
-            pcm.as_ptr() as *const ALvoid,
-            pcm.len() as ALsizei,
-            *rate,
-        );
-        let mut source: ALuint = 0;
-        context.GenSources(1, &mut source);
-        context.Sourcei(source, al::AL_BUFFER, buffer as ALint);
-        context.Sourcef(source, AL_GAIN, vol);
-        context.SourcePlay(source);
-        pool.push((source, buffer));
-    }
-
-    log!("JC3 SFX: group {} -> {} (vol {:.2})", group, name, vol);
-}
-
-/// Try the sensible bundle-relative locations for a sounds.xml filename.
-fn resolve_sound_path(env: &Environment, name: &str) -> Option<GuestPathBuf> {
-    let bp = env.bundle.bundle_path();
-    for cand in [format!("Content/{}", name), name.to_string()] {
-        let p = bp.join(&cand);
-        if env.fs.is_file(&p) {
-            return Some(p);
-        }
-    }
-    None
-}
-
-/// Parse `Content/Audio/sounds.xml` -> map of group id to its wav filenames.
-fn parse_sound_groups(env: &Environment) -> HashMap<i32, Vec<String>> {
-    let mut map: HashMap<i32, Vec<String>> = HashMap::new();
-    let path = env.bundle.bundle_path().join("Content/Audio/sounds.xml");
-    let bytes = match env.fs.read(&path) {
-        Ok(b) => b,
-        Err(()) => {
-            log!("JC3 SFX: could not read {:?}", path.as_str());
-            return map;
-        }
-    };
-    let text = String::from_utf8_lossy(&bytes);
-    let mut cur: Option<i32> = None;
-    for line in text.lines() {
-        let l = line.trim();
-        if let Some(rest) = l.strip_prefix("<Group ") {
-            cur = attr(rest, "id").and_then(|s| s.parse::<i32>().ok());
-        } else if l.starts_with("</Group>") || l.starts_with("<Music") {
-            cur = None;
-        } else if let Some(rest) = l.strip_prefix("<Sound ") {
-            if let (Some(g), Some(fname)) = (cur, attr(rest, "filename")) {
-                map.entry(g).or_default().push(fname);
-            }
-        }
-    }
-    map
-}
-
-/// Extract a simple `key="value"` XML attribute.
-fn attr(s: &str, key: &str) -> Option<String> {
-    let pat = format!("{}=\"", key);
-    let start = s.find(&pat)? + pat.len();
-    let rest = &s[start..];
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
+    log_dbg!("JC3 music: hooked {:#x} -> host trampoline {:#x}", addr, stub_addr);
 }
 
 /// Host implementation of `SoundManager::playMusic(int track)`.
@@ -309,7 +123,7 @@ fn load_pcm(env: &Environment, path: &GuestPathBuf) -> Option<(Vec<u8>, ALenum, 
     let mut file = match AudioFile::open_for_reading(path, &env.fs) {
         Ok(f) => f,
         Err(e) => {
-            log!("JC3 audio: could not open {:?}: {:?}", path.as_str(), e);
+            log!("JC3 music: could not open {:?}: {:?}", path.as_str(), e);
             return None;
         }
     };
@@ -319,7 +133,7 @@ fn load_pcm(env: &Environment, path: &GuestPathBuf) -> Option<(Vec<u8>, ALenum, 
     let read = match file.read_bytes(0, &mut pcm) {
         Ok(n) => n,
         Err(()) => {
-            log!("JC3 audio: decode failed for {:?}", path.as_str());
+            log!("JC3 music: decode failed for {:?}", path.as_str());
             return None;
         }
     };

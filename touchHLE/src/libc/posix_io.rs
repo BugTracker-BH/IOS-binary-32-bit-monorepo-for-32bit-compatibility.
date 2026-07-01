@@ -186,15 +186,7 @@ pub fn open_direct(env: &mut Environment, path: ConstPtr<u8>, flags: i32) -> Fil
     }
 
     let path_string = match env.mem.cstr_at_utf8(path) {
-        Ok(path_str) => {
-            let s = path_str.to_owned();
-            // [jc3-diag] surface audio/XML opens so we can see whether the game
-            // requests sounds.xml (and the wav files) and at what path.
-            if s.contains("Audio") || s.contains(".xml") || s.contains("ound") {
-                log!("[jc3-open] open(\"{}\", {:#x})", s, flags);
-            }
-            s
-        }
+        Ok(path_str) => path_str.to_owned(),
         Err(err) => {
             log!(
                 "open() error, unable to treat {:?} as utf8 str: {:?}",
