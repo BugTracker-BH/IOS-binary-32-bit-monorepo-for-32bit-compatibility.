@@ -167,7 +167,7 @@ fn jc3_create_sound(env: &mut Environment) {
     }
     sound_files().lock().unwrap().insert(bits, name.clone());
     env.cpu.regs_mut()[0] = 0; // FMOD_OK
-    log_dbg!("JC3 createSound {:#x} -> {}", bits, name);
+    log!("JC3 createSound {:#x} -> {}", bits, name);
 }
 
 /// Host `SoundEffectInstance::play(float vol)`.
@@ -263,7 +263,7 @@ fn jc3_sfx_play(env: &mut Environment) {
         inst.insert(this, (source, buffer));
     }
 
-    log_dbg!(
+    log!(
         "JC3 SFX play: inst {:#x} snd {:#x} -> {} (vol {:.2}{})",
         this,
         sound_ptr,
