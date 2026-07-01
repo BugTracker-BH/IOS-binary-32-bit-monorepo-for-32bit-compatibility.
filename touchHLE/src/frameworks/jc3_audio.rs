@@ -295,7 +295,15 @@ fn jc3_play_sound_from_group(env: &mut Environment) {
         pool.push((source, buffer));
     }
 
-    log_dbg!("JC3 SFX: group {} -> {} (vol {:.2})", group, rel, vol);
+    log!(
+        "JC3 SFX: group {} -> {} -> AL source {} ({} Hz, {} bytes, vol {:.2})",
+        group,
+        rel,
+        source,
+        sample_rate,
+        pcm.len(),
+        vol
+    );
 }
 
 /// Open, decode and return interleaved 16-bit PCM plus its OpenAL format and
