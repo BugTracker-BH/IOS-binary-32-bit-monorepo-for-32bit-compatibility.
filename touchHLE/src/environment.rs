@@ -573,6 +573,17 @@ impl Environment {
                             // offline): patch the `[… count]` msgSend @ 0xbf0fc to
                             // `movs r0,#0; nop`.
                             (0xbf0fc, vec![0x2000, 0xbf00]),
+                            // restoreGameThread() @ 0xbfacc: on launch the game
+                            // tries to resume a saved in-progress level by
+                            // deserializing a boost binary archive
+                            // (BinaryReader). touchHLE can't deserialize JC3's
+                            // boost archive, so it throws an uncaught
+                            // archive_exception and panics. Stub it to return
+                            // immediately (`movs r0,#0; bx lr`) — identical to the
+                            // known-good "no save present" path, so the game just
+                            // starts fresh at the menu instead of crashing. Only
+                            // mid-level resume is lost; other progress is separate.
+                            (0xbfacc, vec![0x2000, 0x4770]),
                         ];
                         for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
