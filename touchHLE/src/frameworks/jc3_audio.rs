@@ -3,31 +3,32 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-//! JellyCar 3 audio shim — the full FMOD-to-OpenAL bridge (music + SFX).
+//! JellyCar 3 audio shim (music + SFX), routed through touchHLE's OpenAL stack.
 //!
-//! FMOD is stubbed for JC3, so the game runs silently. This module restores all
-//! audio by hooking `Walaber` engine entry points and routing playback through
-//! touchHLE's existing OpenAL stack:
+//! FMOD fails to initialise under the emulator and JC3 disables its sound
+//! system as a result. Rather than force FMOD init to "succeed" (which pushes
+//! the game into an unhandled boost save-restore path and crashes), we bypass
+//! the sound system entirely at a high level:
 //!
-//! * **Music:** `SoundManager::playMusic(int)` @ 0x101aac -> plays
+//! * **Music:** hook `SoundManager::playMusic(int)` @ 0x101aac -> play
 //!   `Content/Audio/Music/song<N>.mp3` looped.
-//! * **SFX:** every sound effect flows through
-//!   `SoundEffectInstance::play(float)` @ 0xfbde8. An instance's sound is the
-//!   `FMOD::Sound*` at `[this+4]`, produced by `FMOD::System::createSound` @
-//!   0x1b2944 inside `SoundManager::addSound`. We take ownership of createSound/
-//!   createStream so each returns a *unique* (zeroed, deref-safe) sound object
-//!   and we record `sound_ptr -> filename`. Then `play`/`stop` look up
-//!   `[this+4]`, decode the wav, and play it (looping per `sounds.xml`) through
-//!   OpenAL. `SoundEffectInstance::stop()` @ 0xfa59c stops it.
+//! * **SFX:** hook `SoundManager::playSoundFromGroup(int group, float vol)` @
+//!   0x102434. The game calls this for one-shot effects (impacts, UI, win/lose,
+//!   pickups, sproing, inflate/deflate) from gameplay code, independent of the
+//!   (failed) FMOD system. We parse `Content/Audio/sounds.xml` ourselves to map
+//!   group id -> wav files, pick one, and play it through OpenAL.
 //!
-//! Nothing here runs for any app other than `com.disney.JellyCar3`.
+//! Looping effects (engine/sticky/marker) go through the FMOD instance path,
+//! which is dead without FMOD, so they are not covered here.
+//!
+//! Nothing in this module runs for any app other than `com.disney.JellyCar3`.
 
 use crate::audio::openal as al;
 use crate::audio::openal::al_types::*;
 use crate::audio::AudioFile;
 use crate::dyld::HostFunction;
 use crate::fs::GuestPathBuf;
-use crate::mem::{ConstPtr, MutPtr, Ptr};
+use crate::mem::{MutPtr, Ptr};
 use crate::Environment;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
@@ -35,16 +36,8 @@ use std::sync::{Mutex, OnceLock};
 
 /// `Walaber::SoundManager::playMusic(int)` (Thumb).
 const PLAY_MUSIC_ADDR: u32 = 0x101aac;
-/// `Walaber::SoundEffectInstance::play(float)` (Thumb).
-const PLAY_SFX_ADDR: u32 = 0xfbde8;
-/// `Walaber::SoundEffectInstance::stop()` (Thumb).
-const STOP_SFX_ADDR: u32 = 0xfa59c;
-/// `FMOD::System::createSound(...)` (Thumb; currently a bypass stub).
-const CREATE_SOUND_ADDR: u32 = 0x1b2944;
-/// `FMOD::System::createStream(...)` (Thumb; currently a bypass stub).
-const CREATE_STREAM_ADDR: u32 = 0x1b28f8;
-/// Offset of the `FMOD::Sound*` field inside a `SoundEffectInstance`.
-const INSTANCE_SOUND_OFFSET: u32 = 4;
+/// `Walaber::SoundManager::playSoundFromGroup(int group, float vol)` (Thumb).
+const PLAY_SOUND_FROM_GROUP_ADDR: u32 = 0x102434;
 
 /// Standard OpenAL 1.1 enum values not re-exported by openal_soft_wrapper.
 const AL_LOOPING: ALenum = 0x1007;
@@ -55,58 +48,52 @@ static CUR_SOURCE: AtomicU32 = AtomicU32::new(0);
 static CUR_BUFFER: AtomicU32 = AtomicU32::new(0);
 static CUR_TRACK: AtomicI32 = AtomicI32::new(-1);
 
-// --- SFX state (lazily-initialised because HashMap::new isn't const) ---
-/// sound object pointer -> the filename createSound was asked to load.
-fn sound_files() -> &'static Mutex<HashMap<u32, String>> {
-    static S: OnceLock<Mutex<HashMap<u32, String>>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(HashMap::new()))
-}
-/// SoundEffectInstance pointer -> its currently playing (source, buffer).
-fn instance_src() -> &'static Mutex<HashMap<u32, (ALuint, ALuint)>> {
-    static S: OnceLock<Mutex<HashMap<u32, (ALuint, ALuint)>>> = OnceLock::new();
-    S.get_or_init(|| Mutex::new(HashMap::new()))
-}
-/// filename -> decoded (pcm, format, sample_rate), cached so repeated hits don't
-/// re-decode.
+// --- SFX state ---
+/// group id -> wav files (relative paths from sounds.xml, e.g. "Audio/Impact/hit1.wav").
+static GROUP_FILES: OnceLock<HashMap<i32, Vec<String>>> = OnceLock::new();
+/// filename -> decoded (pcm, format, sample_rate), so repeated hits don't re-decode.
 fn pcm_cache() -> &'static Mutex<HashMap<String, (Vec<u8>, ALenum, ALsizei)>> {
     static S: OnceLock<Mutex<HashMap<String, (Vec<u8>, ALenum, ALsizei)>>> = OnceLock::new();
     S.get_or_init(|| Mutex::new(HashMap::new()))
 }
-/// Basenames of sounds that should loop (from `sounds.xml` `loop="true"` groups).
-static LOOP_BASENAMES: OnceLock<Vec<String>> = OnceLock::new();
+/// Currently-playing one-shot (source, buffer) pairs, reaped when finished.
+fn sfx_pool() -> &'static Mutex<Vec<(ALuint, ALuint)>> {
+    static S: OnceLock<Mutex<Vec<(ALuint, ALuint)>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(Vec::new()))
+}
+static RNG: AtomicU32 = AtomicU32::new(0x1234_5678);
 
-/// Install all JC3 audio hooks. Call once, only for `com.disney.JellyCar3`,
-/// AFTER the FMOD bypass stubs are written (so our createSound/createStream
-/// hooks override the fixed-dummy stubs).
+fn next_rand() -> u32 {
+    let mut x = RNG.load(Ordering::Relaxed);
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    RNG.store(x, Ordering::Relaxed);
+    x
+}
+
+/// Install JC3 audio hooks. Call once, only for `com.disney.JellyCar3`.
 pub fn install_audio_hooks(env: &mut Environment) {
-    let _ = LOOP_BASENAMES.set(parse_loop_basenames(env));
+    let _ = GROUP_FILES.set(parse_sound_groups(env));
 
     let music: HostFunction = &(jc3_play_music as fn(&mut Environment));
     patch_thumb_hook(env, PLAY_MUSIC_ADDR, "__touchHLE_JC3PlayMusic", music);
 
-    let cs: HostFunction = &(jc3_create_sound as fn(&mut Environment));
-    patch_thumb_hook(env, CREATE_SOUND_ADDR, "__touchHLE_JC3CreateSound", cs);
-    patch_thumb_hook(env, CREATE_STREAM_ADDR, "__touchHLE_JC3CreateStream", cs);
+    let sfx: HostFunction = &(jc3_play_sound_from_group as fn(&mut Environment));
+    patch_thumb_hook(
+        env,
+        PLAY_SOUND_FROM_GROUP_ADDR,
+        "__touchHLE_JC3PlaySoundFromGroup",
+        sfx,
+    );
 
-    // [jc3-diag] Trace how far SoundManager::init gets: createChannelGroup runs
-    // right after FMOD init succeeds and right before the sounds.xml load. If we
-    // see this but no createSound, the default-sound load is being skipped.
-    let ccg: HostFunction = &(jc3_create_channelgroup as fn(&mut Environment));
-    patch_thumb_hook(env, 0x1b28bc, "__touchHLE_JC3CreateChannelGroup", ccg);
-
-    let play: HostFunction = &(jc3_sfx_play as fn(&mut Environment));
-    patch_thumb_hook(env, PLAY_SFX_ADDR, "__touchHLE_JC3SfxPlay", play);
-    let stop: HostFunction = &(jc3_sfx_stop as fn(&mut Environment));
-    patch_thumb_hook(env, STOP_SFX_ADDR, "__touchHLE_JC3SfxStop", stop);
-
+    let groups = GROUP_FILES.get().map(|g| g.len()).unwrap_or(0);
     log!(
-        "Installed JellyCar 3 audio hooks (music @ {:#x}, SFX play @ {:#x}/stop @ {:#x}, \
-         createSound @ {:#x}/{:#x})",
+        "Installed JellyCar 3 audio hooks (music @ {:#x}, SFX playSoundFromGroup @ {:#x}, \
+         {} sound groups parsed from sounds.xml)",
         PLAY_MUSIC_ADDR,
-        PLAY_SFX_ADDR,
-        STOP_SFX_ADDR,
-        CREATE_SOUND_ADDR,
-        CREATE_STREAM_ADDR
+        PLAY_SOUND_FROM_GROUP_ADDR,
+        groups
     );
 }
 
@@ -115,9 +102,9 @@ pub fn install_audio_hooks(env: &mut Environment) {
 /// to the caller):
 ///   ldr r3, [pc, #0]   ; 0x4b00
 ///   bx  r3             ; 0x4718
-///   .word stub_addr    ; ARM address
+///   .word stub_addr
 /// r3 is caller-clobbered under AAPCS; r0-r2 (all inputs our shims read) are
-/// preserved, as are stack args.
+/// preserved.
 fn patch_thumb_hook(env: &mut Environment, addr: u32, symbol: &'static str, hf: HostFunction) {
     let stub = env.dyld.create_guest_function(&mut env.mem, symbol, hf);
     let stub_addr = stub.addr_without_thumb_bit();
@@ -131,89 +118,32 @@ fn patch_thumb_hook(env: &mut Environment, addr: u32, symbol: &'static str, hf: 
     log_dbg!("JC3 audio: hooked {:#x} -> host trampoline {:#x}", addr, stub_addr);
 }
 
-/// Read a NUL-terminated guest C string (bounded).
-fn read_cstr(env: &Environment, addr: u32) -> String {
-    let mut bytes = Vec::new();
-    let mut p = addr;
-    for _ in 0..1024 {
-        let cp: ConstPtr<u8> = Ptr::from_bits(p);
-        let b: u8 = env.mem.read(cp);
-        if b == 0 {
-            break;
-        }
-        bytes.push(b);
-        p += 1;
-    }
-    String::from_utf8_lossy(&bytes).into_owned()
-}
-
-/// Host `FMOD::System::createSound` / `createStream`.
-/// ABI: r0=System*, r1=const char* name, r2=mode, r3=exinfo, [sp]=FMOD::Sound**.
-/// We hand back a unique zeroed sound object and record its pointer -> filename.
-fn jc3_create_sound(env: &mut Environment) {
-    let name_ptr = env.cpu.regs()[1];
-    let sp = env.cpu.regs()[13];
-    // 5th argument (the out `FMOD::Sound**`) is on the stack at [sp].
-    let sp_ptr: ConstPtr<u32> = Ptr::from_bits(sp);
-    let out_ptr: u32 = env.mem.read(sp_ptr);
-    let name = read_cstr(env, name_ptr);
-
-    // Allocate a unique, zeroed pseudo-Sound object. Zeroed (like the old fixed
-    // dummy) so any incidental FMOD deref reads zeros safely; unique so we can
-    // map it back to a filename at play() time.
-    let buf = env.mem.alloc(0x40);
-    let bits = buf.to_bits();
-    for i in 0..0x10u32 {
-        let z: MutPtr<u32> = Ptr::from_bits(bits + i * 4);
-        env.mem.write(z, 0u32);
-    }
-    if out_ptr != 0 {
-        let outp: MutPtr<u32> = Ptr::from_bits(out_ptr);
-        env.mem.write(outp, bits);
-    }
-    sound_files().lock().unwrap().insert(bits, name.clone());
-    env.cpu.regs_mut()[0] = 0; // FMOD_OK
-    log!("JC3 createSound {:#x} -> {}", bits, name);
-}
-
-/// [jc3-diag] Host `FMOD::System::createChannelGroup` — logs that init reached
-/// the FMOD channel-group setup (just before the sounds.xml load), returns OK.
-fn jc3_create_channelgroup(env: &mut Environment) {
-    env.cpu.regs_mut()[0] = 0; // FMOD_OK
-    log!("JC3 createChannelGroup called (init reached FMOD channel-group setup)");
-}
-
-/// Host `SoundEffectInstance::play(float vol)`.
-/// ABI: r0 = instance*, r1 = volume (float bits, softfp).
-fn jc3_sfx_play(env: &mut Environment) {
-    let this = env.cpu.regs()[0];
-    let vol = f32::from_bits(env.cpu.regs()[1]);
-    let snd_field: ConstPtr<u32> = Ptr::from_bits(this + INSTANCE_SOUND_OFFSET);
-    let sound_ptr: u32 = env.mem.read(snd_field);
-
-    let name = match sound_files().lock().unwrap().get(&sound_ptr) {
-        Some(s) => s.clone(),
-        None => return, // sound object we didn't create; nothing to play
-    };
-
-    if !vol.is_finite() {
-        return;
-    }
-    // The game uses play(0.0) to mean "stop".
+/// Host `SoundManager::playSoundFromGroup(int group, float vol)`.
+/// ABI: r0 = this (unused), r1 = group id, r2 = volume (float bits, softfp).
+fn jc3_play_sound_from_group(env: &mut Environment) {
+    let group = env.cpu.regs()[1] as i32;
+    let vol = f32::from_bits(env.cpu.regs()[2]);
+    let vol = if vol.is_finite() { vol.clamp(0.0, 1.0) } else { 1.0 };
     if vol <= 0.0 {
-        stop_instance(env, this);
         return;
     }
-    let vol = vol.min(1.0);
+
+    // Pick a wav from the group (mirrors the game's random selection).
+    let name = {
+        let Some(files) = GROUP_FILES.get().and_then(|g| g.get(&group)) else {
+            return;
+        };
+        if files.is_empty() {
+            return;
+        }
+        files[(next_rand() as usize) % files.len()].clone()
+    };
 
     // Decode (cached).
     if !pcm_cache().lock().unwrap().contains_key(&name) {
-        let path = match resolve_sound_path(env, &name) {
-            Some(p) => p,
-            None => {
-                log!("JC3 SFX: file not found for {:?}", name);
-                return;
-            }
+        let Some(path) = resolve_sound_path(env, &name) else {
+            log!("JC3 SFX: file not found for {:?}", name);
+            return;
         };
         match load_pcm(env, &path) {
             Some(dec) => {
@@ -223,37 +153,25 @@ fn jc3_sfx_play(env: &mut Environment) {
         }
     }
 
-    let looping = is_loop(&name);
-
     let context = env
         .framework_state
         .audio_toolbox
         .make_al_context_current(env.openal_manager.as_mut());
     unsafe {
-        let mut inst = instance_src().lock().unwrap();
-
-        // Reap finished one-shots (any instance other than this one).
-        let keys: Vec<u32> = inst.keys().copied().collect();
-        for k in keys {
-            if k == this {
-                continue;
-            }
-            let (s, b) = inst[&k];
+        // Reap finished one-shots.
+        let mut pool = sfx_pool().lock().unwrap();
+        let mut i = 0;
+        while i < pool.len() {
+            let (s, b) = pool[i];
             let mut state: ALint = 0;
             context.GetSourcei(s, al::AL_SOURCE_STATE, &mut state);
             if state != al::AL_PLAYING {
                 context.DeleteSources(1, &s);
                 context.DeleteBuffers(1, &b);
-                inst.remove(&k);
+                pool.remove(i);
+            } else {
+                i += 1;
             }
-        }
-
-        // Retrigger: stop any sound currently playing on this instance.
-        if let Some((s, b)) = inst.remove(&this) {
-            context.SourceStop(s);
-            context.Sourcei(s, al::AL_BUFFER, 0);
-            context.DeleteSources(1, &s);
-            context.DeleteBuffers(1, &b);
         }
 
         let cache = pcm_cache().lock().unwrap();
@@ -270,56 +188,18 @@ fn jc3_sfx_play(env: &mut Environment) {
         let mut source: ALuint = 0;
         context.GenSources(1, &mut source);
         context.Sourcei(source, al::AL_BUFFER, buffer as ALint);
-        context.Sourcei(source, AL_LOOPING, if looping { 1 } else { 0 });
         context.Sourcef(source, AL_GAIN, vol);
         context.SourcePlay(source);
-        inst.insert(this, (source, buffer));
+        pool.push((source, buffer));
     }
 
-    log!(
-        "JC3 SFX play: inst {:#x} snd {:#x} -> {} (vol {:.2}{})",
-        this,
-        sound_ptr,
-        name,
-        vol,
-        if looping { ", loop" } else { "" }
-    );
+    log!("JC3 SFX: group {} -> {} (vol {:.2})", group, name, vol);
 }
 
-/// Host `SoundEffectInstance::stop()`. ABI: r0 = instance*.
-fn jc3_sfx_stop(env: &mut Environment) {
-    let this = env.cpu.regs()[0];
-    stop_instance(env, this);
-}
-
-fn stop_instance(env: &mut Environment, this: u32) {
-    let entry = instance_src().lock().unwrap().remove(&this);
-    if let Some((source, buffer)) = entry {
-        let context = env
-            .framework_state
-            .audio_toolbox
-            .make_al_context_current(env.openal_manager.as_mut());
-        unsafe {
-            context.SourceStop(source);
-            context.Sourcei(source, al::AL_BUFFER, 0);
-            context.DeleteSources(1, &source);
-            context.DeleteBuffers(1, &buffer);
-        }
-    }
-}
-
-/// True if `name`'s basename belongs to a `loop="true"` group in sounds.xml.
-fn is_loop(name: &str) -> bool {
-    let base = name.rsplit('/').next().unwrap_or(name);
-    LOOP_BASENAMES
-        .get()
-        .map_or(false, |v| v.iter().any(|b| b == base))
-}
-
-/// Try the sensible bundle-relative locations for a createSound filename.
+/// Try the sensible bundle-relative locations for a sounds.xml filename.
 fn resolve_sound_path(env: &Environment, name: &str) -> Option<GuestPathBuf> {
     let bp = env.bundle.bundle_path();
-    for cand in [name.to_string(), format!("Content/{}", name)] {
+    for cand in [format!("Content/{}", name), name.to_string()] {
         let p = bp.join(&cand);
         if env.fs.is_file(&p) {
             return Some(p);
@@ -328,33 +208,32 @@ fn resolve_sound_path(env: &Environment, name: &str) -> Option<GuestPathBuf> {
     None
 }
 
-/// Parse `Content/Audio/sounds.xml` and collect the basenames of sounds that
-/// belong to `loop="true"` groups (engine, sticky-tire loop, alarm, marker...).
-fn parse_loop_basenames(env: &Environment) -> Vec<String> {
-    let mut out = Vec::new();
+/// Parse `Content/Audio/sounds.xml` -> map of group id to its wav filenames.
+fn parse_sound_groups(env: &Environment) -> HashMap<i32, Vec<String>> {
+    let mut map: HashMap<i32, Vec<String>> = HashMap::new();
     let path = env.bundle.bundle_path().join("Content/Audio/sounds.xml");
     let bytes = match env.fs.read(&path) {
         Ok(b) => b,
-        Err(()) => return out,
+        Err(()) => {
+            log!("JC3 SFX: could not read {:?}", path.as_str());
+            return map;
+        }
     };
     let text = String::from_utf8_lossy(&bytes);
-    let mut cur_loop = false;
+    let mut cur: Option<i32> = None;
     for line in text.lines() {
         let l = line.trim();
         if let Some(rest) = l.strip_prefix("<Group ") {
-            cur_loop = attr(rest, "loop").as_deref() == Some("true");
+            cur = attr(rest, "id").and_then(|s| s.parse::<i32>().ok());
         } else if l.starts_with("</Group>") || l.starts_with("<Music") {
-            cur_loop = false;
+            cur = None;
         } else if let Some(rest) = l.strip_prefix("<Sound ") {
-            if cur_loop {
-                if let Some(fname) = attr(rest, "filename") {
-                    let base = fname.rsplit('/').next().unwrap_or(&fname).to_string();
-                    out.push(base);
-                }
+            if let (Some(g), Some(fname)) = (cur, attr(rest, "filename")) {
+                map.entry(g).or_default().push(fname);
             }
         }
     }
-    out
+    map
 }
 
 /// Extract a simple `key="value"` XML attribute.

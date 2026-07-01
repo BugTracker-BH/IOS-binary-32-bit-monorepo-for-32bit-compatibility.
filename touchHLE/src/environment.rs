@@ -528,15 +528,6 @@ impl Environment {
                             let p: MutPtr<u32> = Ptr::from_bits(d + i * 4);
                             env.mem.write(p, 0u32);
                         }
-                        // Likewise a non-null zeroed dummy FMOD::System object,
-                        // handed back by FMOD_System_Create so the init sequence
-                        // (getVersion/init/etc.) has a valid `this` to operate on.
-                        let dummy_system = env.mem.alloc(0x400);
-                        let sys = dummy_system.to_bits();
-                        for i in 0..0x100u32 {
-                            let p: MutPtr<u32> = Ptr::from_bits(sys + i * 4);
-                            env.mem.write(p, 0u32);
-                        }
                         // Thumb stub for createSound/createStream: write the dummy
                         // pointer to the output Sound** (5th arg, on the stack) and
                         // return FMOD_OK.
@@ -564,23 +555,6 @@ impl Environment {
                             (0x1b7914, vec![0x2101, 0x7441, 0x2000, 0x4770]),
                             // FMOD::System::getSoftwareFormat -> FMOD_OK
                             (0x1b2678, vec![0x2000, 0x4770]),
-                            // FMOD::System::getVersion (the one SoundManager::init
-                            // actually calls, @ 0x1b2990 — NOT SystemI @ 0x1b2c18):
-                            // write *version = 0x43307 (game requires > 0x43306) and
-                            // return FMOD_OK.
-                            //   ldr r0,[pc,#4] (0x4801) -> r0 = version literal
-                            //   str r0,[r1]    (0x6008) -> *version = 0x43307
-                            //   movs r0,#0     (0x2000) -> FMOD_OK
-                            //   bx lr          (0x4770)
-                            //   <0x3307>, <0x0004>       -> .word 0x00043307
-                            (
-                                0x1b2990,
-                                vec![0x4801, 0x6008, 0x2000, 0x4770, 0x3307, 0x0004],
-                            ),
-                            // FMOD::System::init (the one the game calls @ 0x1b29f0,
-                            // NOT SystemI::init @ 0x1b7914) -> FMOD_OK. This is what
-                            // was actually gating sound loading.
-                            (0x1b29f0, vec![0x2000, 0x4770]),
                             // FMOD::System::createChannelGroup -> FMOD_OK (output in r2
                             // already points at a zero-inited field; safe to leave)
                             (0x1b28bc, vec![0x2000, 0x4770]),
@@ -608,38 +582,17 @@ impl Environment {
                             env.cpu.invalidate_cache_range(*addr, (hws.len() * 2) as u32);
                         }
 
-                        // FMOD_System_Create @ 0x140fec is ARM code (reached via
-                        // `blx` from Thumb, even target => ARM state), so it needs
-                        // an ARM stub rather than a Thumb one. It takes an out
-                        // `FMOD::System**` in r0; write the dummy system there and
-                        // return FMOD_OK. Without this the real Create runs, the
-                        // whole init sequence fails ("invalid parameter"), and the
-                        // game disables sound before loading any SFX.
-                        //   ldr r12,[pc,#8] -> r12 = dummy_system (literal @ +0x10)
-                        //   str r12,[r0]    -> *out = dummy_system
-                        //   mov r0,#0       -> FMOD_OK
-                        //   bx lr
-                        //   .word dummy_system
-                        let create_arm: [u32; 5] = [
-                            0xe59fc008, 0xe580c000, 0xe3a00000, 0xe12fff1e, sys,
-                        ];
-                        for (i, &w) in create_arm.iter().enumerate() {
-                            let p: MutPtr<u32> = Ptr::from_bits(0x140fec + (i as u32) * 4);
-                            env.mem.write(p, w);
-                        }
-                        env.cpu.invalidate_cache_range(0x140fec, 20);
-
                         log!(
-                            "Applied JellyCar 3 FMOD init/bypass stubs (dummy Sound @ {:#x}, \
-                             dummy System @ {:#x}) — sound system now initialises",
-                            d,
-                            sys
+                            "Applied JellyCar 3 FMOD bypass stubs (dummy Sound @ {:#x}) \
+                             (FMOD stays failed/disabled; menu/render/music enabled)",
+                            d
                         );
 
-                        // Audio bridge: route JC3 audio (music + all SFX)
-                        // through OpenAL. Installs AFTER the FMOD stubs above so
-                        // our createSound/createStream hooks override the
-                        // fixed-dummy stubs (needed to tell sounds apart).
+                        // Audio bridge: route JC3 audio (music + SFX) through OpenAL.
+                        // SFX are played by hooking SoundManager::playSoundFromGroup
+                        // and parsing sounds.xml ourselves, so we do NOT force FMOD
+                        // init (forcing it pushes the game into an unhandled
+                        // save-restore path). FMOD stays failed/disabled as before.
                         crate::frameworks::jc3_audio::install_audio_hooks(env);
                     }
 
