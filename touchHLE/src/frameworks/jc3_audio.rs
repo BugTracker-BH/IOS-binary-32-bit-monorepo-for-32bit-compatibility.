@@ -27,7 +27,7 @@ use crate::audio::openal::al_types::*;
 use crate::audio::AudioFile;
 use crate::dyld::HostFunction;
 use crate::fs::GuestPathBuf;
-use crate::mem::{MutPtr, Ptr};
+use crate::mem::{ConstPtr, MutPtr, Ptr};
 use crate::Environment;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
@@ -130,7 +130,8 @@ fn read_cstr(env: &Environment, addr: u32) -> String {
     let mut bytes = Vec::new();
     let mut p = addr;
     for _ in 0..1024 {
-        let b: u8 = env.mem.read(Ptr::from_bits(p));
+        let cp: ConstPtr<u8> = Ptr::from_bits(p);
+        let b: u8 = env.mem.read(cp);
         if b == 0 {
             break;
         }
@@ -147,7 +148,8 @@ fn jc3_create_sound(env: &mut Environment) {
     let name_ptr = env.cpu.regs()[1];
     let sp = env.cpu.regs()[13];
     // 5th argument (the out `FMOD::Sound**`) is on the stack at [sp].
-    let out_ptr: u32 = env.mem.read(Ptr::from_bits(sp));
+    let sp_ptr: ConstPtr<u32> = Ptr::from_bits(sp);
+    let out_ptr: u32 = env.mem.read(sp_ptr);
     let name = read_cstr(env, name_ptr);
 
     // Allocate a unique, zeroed pseudo-Sound object. Zeroed (like the old fixed
@@ -173,7 +175,8 @@ fn jc3_create_sound(env: &mut Environment) {
 fn jc3_sfx_play(env: &mut Environment) {
     let this = env.cpu.regs()[0];
     let vol = f32::from_bits(env.cpu.regs()[1]);
-    let sound_ptr: u32 = env.mem.read(Ptr::from_bits(this + INSTANCE_SOUND_OFFSET));
+    let snd_field: ConstPtr<u32> = Ptr::from_bits(this + INSTANCE_SOUND_OFFSET);
+    let sound_ptr: u32 = env.mem.read(snd_field);
 
     let name = match sound_files().lock().unwrap().get(&sound_ptr) {
         Some(s) => s.clone(),
