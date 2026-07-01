@@ -260,7 +260,7 @@ fn jc3_play_sound_from_group(env: &mut Environment) {
         .framework_state
         .audio_toolbox
         .make_al_context_current(env.openal_manager.as_mut());
-    unsafe {
+    let source = unsafe {
         let mut pool = SFX_POOL.lock().unwrap();
 
         // Reap finished one-shots so we don't leak OpenAL sources/buffers.
@@ -293,7 +293,8 @@ fn jc3_play_sound_from_group(env: &mut Environment) {
         context.Sourcef(source, AL_GAIN, vol);
         context.SourcePlay(source);
         pool.push((source, buffer));
-    }
+        source
+    };
 
     log!(
         "JC3 SFX: group {} -> {} -> AL source {} ({} Hz, {} bytes, vol {:.2})",
