@@ -32,6 +32,8 @@ pub mod core_location;
 pub mod core_motion;
 pub mod foundation;
 pub mod game_kit;
+/// JellyCar 3 music shim (FMOD-to-OpenAL bridge, Stage 1). JC3-only.
+pub mod jc3_audio;
 pub mod media_player;
 pub mod message_ui;
 pub mod openal;

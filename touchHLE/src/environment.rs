@@ -586,6 +586,12 @@ impl Environment {
                              (audio disabled; menu/render enabled)",
                             d
                         );
+
+                        // Stage 1 audio: replace SoundManager::playMusic with a
+                        // host shim that plays the track's MP3 through OpenAL.
+                        // (FMOD stays stubbed; this restores music only. SFX is
+                        // a later stage.)
+                        crate::frameworks::jc3_audio::install_music_hook(env);
                     }
 
                     // Some apps use the stack inside the static initializer.
