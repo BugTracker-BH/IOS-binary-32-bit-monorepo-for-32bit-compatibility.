@@ -502,7 +502,15 @@ fn class_name_should_be_faked(name: &str) -> bool {
         || name.starts_with("Tapjoy")
         || name.starts_with("AdWhirl")
         || name.starts_with("iSimulate")
-        || name.starts_with("DMO") // Disney Mobile Online backend
+        // Disney Mobile Online backend/network classes: fake them (they need
+        // CFNetwork, which is unimplemented) — EXCEPT DMOUser, which is JC3's
+        // OWN class with real offline score-queue logic. Faking DMOUser turns
+        // it into a no-op, so on level complete the "saving data, please wait"
+        // screen polls a nil result forever (null-page reads at 0x8). Letting
+        // the real DMOUser run — combined with the _canNetwork=0 stub forcing
+        // its offline branch — makes it save locally and dismiss, exactly like
+        // the game does offline on a real device.
+        || (name.starts_with("DMO") && name != "DMOUser")
 }
 
 impl ObjC {
