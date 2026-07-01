@@ -573,6 +573,17 @@ impl Environment {
                             // offline): patch the `[… count]` msgSend @ 0xbf0fc to
                             // `movs r0,#0; nop`.
                             (0xbf0fc, vec![0x2000, 0xbf00]),
+                            // -[DMOUser _canNetwork] @ 0x2a7b50: on level complete
+                            // JC3 submits the score to Disney Mobile Online and shows
+                            // "saving data, please wait" until the HTTP delegate
+                            // (httpRequestDidFinishLoading:/didFailWithError:) calls
+                            // submitScoreCallDidComplete:. touchHLE has no CFNetwork,
+                            // so the request never completes and the overlay hangs
+                            // forever. _canNetwork wrongly reports "online" here;
+                            // force it to 0 so submitScore takes its built-in OFFLINE
+                            // branch (queues the score, no server wait) and the game
+                            // returns to the menu. `movs r0,#0; bx lr`.
+                            (0x2a7b50, vec![0x2000, 0x4770]),
                         ];
                         for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
