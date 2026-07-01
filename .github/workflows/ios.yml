@@ -89,17 +89,39 @@ jobs:
           rm -rf "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/deb"
           mkdir -p "$APP"
           cp "$BIN" "$APP/touchHLE"; chmod +x "$APP/touchHLE"
-          # ---- App icon (packaging only; generated from build-ios/AppIcon1024.png) ----
+          # ---- App icon: compile a proper asset catalog (Assets.car) for reliable
+          #      home-screen display on iOS 14+, plus loose PNGs as a fallback.
+          #      Packaging only — no runtime code involved. ----
           ICON_SRC=build-ios/AppIcon1024.png
+          [ -f "$ICON_SRC" ] || ICON_SRC="$GITHUB_WORKSPACE/touchHLE.png"
           if [ -f "$ICON_SRC" ]; then
-            sips -z 120 120 "$ICON_SRC" --out "$APP/AppIcon60x60@2x.png"
-            sips -z 180 180 "$ICON_SRC" --out "$APP/AppIcon60x60@3x.png"
-            sips -z 152 152 "$ICON_SRC" --out "$APP/AppIcon76x76@2x.png"
-            sips -z 167 167 "$ICON_SRC" --out "$APP/AppIcon83.5x83.5@2x.png"
-            cp "$ICON_SRC" "$APP/AppIcon1024.png"
-            echo "--- icons ---"; ls -la "$APP"/AppIcon*.png
+            echo "Icon source: $ICON_SRC"
+            # Loose PNGs (fallback path; referenced by CFBundleIconFiles).
+            sips -z 120 120 "$ICON_SRC" --out "$APP/AppIcon60x60@2x.png"    >/dev/null
+            sips -z 180 180 "$ICON_SRC" --out "$APP/AppIcon60x60@3x.png"    >/dev/null
+            sips -z 152 152 "$ICON_SRC" --out "$APP/AppIcon76x76@2x.png"    >/dev/null
+            sips -z 167 167 "$ICON_SRC" --out "$APP/AppIcon83.5x83.5@2x.png" >/dev/null
+            # Asset catalog -> Assets.car (primary path; referenced by CFBundleIconName).
+            ICONSET="$RUNNER_TEMP/Assets.xcassets/AppIcon.appiconset"
+            mkdir -p "$ICONSET"
+            sips -z 120  120  "$ICON_SRC" --out "$ICONSET/i120.png"  >/dev/null
+            sips -z 180  180  "$ICON_SRC" --out "$ICONSET/i180.png"  >/dev/null
+            sips -z 152  152  "$ICON_SRC" --out "$ICONSET/i152.png"  >/dev/null
+            sips -z 167  167  "$ICON_SRC" --out "$ICONSET/i167.png"  >/dev/null
+            sips -z 1024 1024 "$ICON_SRC" --out "$ICONSET/i1024.png" >/dev/null
+            printf '%s' '{"images":[{"idiom":"iphone","size":"60x60","scale":"2x","filename":"i120.png"},{"idiom":"iphone","size":"60x60","scale":"3x","filename":"i180.png"},{"idiom":"ipad","size":"76x76","scale":"2x","filename":"i152.png"},{"idiom":"ipad","size":"83.5x83.5","scale":"2x","filename":"i167.png"},{"idiom":"ios-marketing","size":"1024x1024","scale":"1x","filename":"i1024.png"}],"info":{"version":1,"author":"xcode"}}' > "$ICONSET/Contents.json"
+            printf '%s' '{"info":{"version":1,"author":"xcode"}}' > "$RUNNER_TEMP/Assets.xcassets/Contents.json"
+            if command -v actool >/dev/null 2>&1; then
+              actool "$RUNNER_TEMP/Assets.xcassets" --compile "$APP" \
+                --app-icon AppIcon --platform iphoneos --minimum-deployment-target 14.0 \
+                --output-partial-info-plist "$RUNNER_TEMP/icon-partial.plist" \
+                || echo "actool failed; falling back to loose PNG icons"
+            else
+              echo "actool not available; using loose PNG icons only"
+            fi
+            echo "--- app icon artifacts ---"; ls -la "$APP"/AppIcon*.png "$APP"/Assets.car 2>/dev/null || true
           else
-            echo "WARNING: $ICON_SRC not found; app will use the default (no) icon"
+            echo "WARNING: no icon source (build-ios/AppIcon1024.png or touchHLE.png); default icon"
           fi
           cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
           cp -r touchHLE_fonts "$APP/touchHLE_fonts"
@@ -131,6 +153,7 @@ jobs:
             printf '%s\n' '<key>UILaunchScreen</key><dict/>'
             printf '%s\n' '<key>UIApplicationSupportsIndirectInputEvents</key><true/>'
             printf '%s\n' '<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>org.touchhle.ios.run</string><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLSchemes</key><array><string>touchhle</string></array></dict></array>'
+            printf '%s\n' '<key>CFBundleIconName</key><string>AppIcon</string>'
             printf '%s\n' '<key>CFBundleIcons</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconName</key><string>AppIcon</string><key>CFBundleIconFiles</key><array><string>AppIcon60x60</string></array></dict></dict>'
             printf '%s\n' '<key>CFBundleIcons~ipad</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconName</key><string>AppIcon</string><key>CFBundleIconFiles</key><array><string>AppIcon60x60</string><string>AppIcon76x76</string><string>AppIcon83.5x83.5</string></array></dict></dict>'
             printf '%s\n' '</dict></plist>'
