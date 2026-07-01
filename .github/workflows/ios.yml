@@ -126,13 +126,24 @@ jobs:
           cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
           cp -r touchHLE_fonts "$APP/touchHLE_fonts"
           cp touchHLE_default_options.txt "$APP/touchHLE_default_options.txt" || true
-          GAME_IPA="$(ls "$GITHUB_WORKSPACE"/*.ipa 2>/dev/null | head -1)"
-          echo "Bundling game: $GAME_IPA"
-          if [ -n "$GAME_IPA" ] && [ -f "$GAME_IPA" ]; then
-            ( cd "$RUNNER_TEMP" && rm -rf jc && mkdir jc && cd jc && unzip -oq "$GAME_IPA" )
-            mkdir -p "$APP/touchHLE_apps"
-            cp -r "$RUNNER_TEMP"/jc/Payload/*.app "$APP/touchHLE_apps/" || true
-          fi
+          # Bundle EVERY .ipa in the repo root (not just the first). The iOS port
+          # runs in launcher mode: prepopulate_user_data_dir() symlinks each app
+          # from the bundle's touchHLE_apps/ dir into the writable apps dir, and
+          # the built-in app picker lists them all. So all we do here is extract
+          # each game's Payload/*.app into touchHLE_apps/.
+          mkdir -p "$APP/touchHLE_apps"
+          shopt -s nullglob
+          i=0
+          for GAME_IPA in "$GITHUB_WORKSPACE"/*.ipa; do
+            [ -f "$GAME_IPA" ] || continue
+            i=$((i+1))
+            echo "Bundling game #$i: $GAME_IPA"
+            EXDIR="$RUNNER_TEMP/jc$i"
+            rm -rf "$EXDIR"; mkdir -p "$EXDIR"
+            ( cd "$EXDIR" && unzip -oq "$GAME_IPA" )
+            cp -r "$EXDIR"/Payload/*.app "$APP/touchHLE_apps/" || true
+          done
+          echo "--- bundled apps ($i) ---"; ls -la "$APP/touchHLE_apps/" || true
           # ---- Info.plist (printf line-by-line; no base64 to corrupt) ----
           { printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>'
             printf '%s\n' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">'
