@@ -1814,6 +1814,28 @@ impl Environment {
                         self.debug_cpu_error(e);
                     }
                 }
+
+                // [jc3-diag] When null-page reads flood (a guest loop polling a
+                // faked/nil object — e.g. the JC3 level-complete "saving" hang),
+                // dump the guest PC + backtrace exactly once so we can see which
+                // function/object is stuck. Cheap load per instruction; disabled
+                // after the single dump.
+                {
+                    use std::sync::atomic::{AtomicBool, Ordering};
+                    static DUMPED: AtomicBool = AtomicBool::new(false);
+                    if !DUMPED.load(Ordering::Relaxed)
+                        && crate::mem::NULL_READ_COUNT.load(Ordering::Relaxed) > 5000
+                    {
+                        DUMPED.store(true, Ordering::Relaxed);
+                        log!(
+                            "[jc3-diag] null-page-read flood — guest PC = {:#x}, LR = {:#x}; backtrace:",
+                            self.cpu.regs()[cpu::Cpu::PC],
+                            self.cpu.regs()[cpu::Cpu::LR]
+                        );
+                        self.stack_trace_current();
+                    }
+                }
+
                 if self.remaining_ticks.is_none() {
                     break;
                 }
