@@ -89,18 +89,6 @@ jobs:
           rm -rf "$RUNNER_TEMP/Payload" "$RUNNER_TEMP/deb"
           mkdir -p "$APP"
           cp "$BIN" "$APP/touchHLE"; chmod +x "$APP/touchHLE"
-          # ---- App icon (generated from build-ios/AppIcon1024.png via sips) ----
-          ICON_SRC=build-ios/AppIcon1024.png
-          if [ -f "$ICON_SRC" ]; then
-            sips -z 120 120 "$ICON_SRC" --out "$APP/AppIcon60x60@2x.png"
-            sips -z 180 180 "$ICON_SRC" --out "$APP/AppIcon60x60@3x.png"
-            sips -z 152 152 "$ICON_SRC" --out "$APP/AppIcon76x76@2x.png"
-            sips -z 167 167 "$ICON_SRC" --out "$APP/AppIcon83.5x83.5@2x.png"
-            cp "$ICON_SRC" "$APP/AppIcon1024.png"
-            echo "--- icons ---"; ls -la "$APP"/AppIcon*.png
-          else
-            echo "WARNING: $ICON_SRC not found; app will have the default (no) icon"
-          fi
           cp -r touchHLE_dylibs "$APP/touchHLE_dylibs"
           cp -r touchHLE_fonts "$APP/touchHLE_fonts"
           cp touchHLE_default_options.txt "$APP/touchHLE_default_options.txt" || true
@@ -131,8 +119,6 @@ jobs:
             printf '%s\n' '<key>UILaunchScreen</key><dict/>'
             printf '%s\n' '<key>UIApplicationSupportsIndirectInputEvents</key><true/>'
             printf '%s\n' '<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>org.touchhle.ios.run</string><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLSchemes</key><array><string>touchhle</string></array></dict></array>'
-            printf '%s\n' '<key>CFBundleIcons</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconName</key><string>AppIcon</string><key>CFBundleIconFiles</key><array><string>AppIcon60x60</string></array></dict></dict>'
-            printf '%s\n' '<key>CFBundleIcons~ipad</key><dict><key>CFBundlePrimaryIcon</key><dict><key>CFBundleIconName</key><string>AppIcon</string><key>CFBundleIconFiles</key><array><string>AppIcon60x60</string><string>AppIcon76x76</string><string>AppIcon83.5x83.5</string></array></dict></dict>'
             printf '%s\n' '</dict></plist>'
           } > "$APP/Info.plist"
           echo "--- Info.plist ---"; cat "$APP/Info.plist"; plutil -lint "$APP/Info.plist" || true
