@@ -29,6 +29,11 @@ use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 /// Guest address of `Walaber::SoundManager::playMusic(int)` (Thumb code).
 const PLAY_MUSIC_ADDR: u32 = 0x101aac;
 
+/// Standard OpenAL 1.1 enum values that the `openal_soft_wrapper` crate does
+/// not re-export (it only defines the handful it needs). Values per `al.h`.
+const AL_LOOPING: ALenum = 0x1007;
+const AL_GAIN: ALenum = 0x100A;
+
 /// The currently playing OpenAL source / buffer names (0 = none), and the
 /// track index that is playing (-1 = none). JC3 is single-threaded from our
 /// perspective (the hook only runs on the guest's main thread), so plain
@@ -149,8 +154,8 @@ fn jc3_play_music(env: &mut Environment) {
         let mut source: ALuint = 0;
         context.GenSources(1, &mut source);
         context.Sourcei(source, al::AL_BUFFER, buffer as ALint);
-        context.Sourcei(source, al::AL_LOOPING, al::AL_TRUE as ALint);
-        context.Sourcef(source, al::AL_GAIN, 1.0);
+        context.Sourcei(source, AL_LOOPING, 1 /* AL_TRUE */);
+        context.Sourcef(source, AL_GAIN, 1.0);
         context.SourcePlay(source);
         (source, buffer)
     };
