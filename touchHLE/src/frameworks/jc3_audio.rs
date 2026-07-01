@@ -88,6 +88,12 @@ pub fn install_audio_hooks(env: &mut Environment) {
     patch_thumb_hook(env, CREATE_SOUND_ADDR, "__touchHLE_JC3CreateSound", cs);
     patch_thumb_hook(env, CREATE_STREAM_ADDR, "__touchHLE_JC3CreateStream", cs);
 
+    // [jc3-diag] Trace how far SoundManager::init gets: createChannelGroup runs
+    // right after FMOD init succeeds and right before the sounds.xml load. If we
+    // see this but no createSound, the default-sound load is being skipped.
+    let ccg: HostFunction = &(jc3_create_channelgroup as fn(&mut Environment));
+    patch_thumb_hook(env, 0x1b28bc, "__touchHLE_JC3CreateChannelGroup", ccg);
+
     let play: HostFunction = &(jc3_sfx_play as fn(&mut Environment));
     patch_thumb_hook(env, PLAY_SFX_ADDR, "__touchHLE_JC3SfxPlay", play);
     let stop: HostFunction = &(jc3_sfx_stop as fn(&mut Environment));
@@ -168,6 +174,13 @@ fn jc3_create_sound(env: &mut Environment) {
     sound_files().lock().unwrap().insert(bits, name.clone());
     env.cpu.regs_mut()[0] = 0; // FMOD_OK
     log!("JC3 createSound {:#x} -> {}", bits, name);
+}
+
+/// [jc3-diag] Host `FMOD::System::createChannelGroup` — logs that init reached
+/// the FMOD channel-group setup (just before the sounds.xml load), returns OK.
+fn jc3_create_channelgroup(env: &mut Environment) {
+    env.cpu.regs_mut()[0] = 0; // FMOD_OK
+    log!("JC3 createChannelGroup called (init reached FMOD channel-group setup)");
 }
 
 /// Host `SoundEffectInstance::play(float vol)`.
