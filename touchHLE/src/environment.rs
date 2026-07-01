@@ -560,9 +560,13 @@ impl Environment {
                             (0x1b28bc, vec![0x2000, 0x4770]),
                             // FMOD::System::setSoftwareFormat -> FMOD_OK
                             (0x1b2a34, vec![0x2000, 0x4770]),
-                            // FMOD::System::createSound  -> dummy Sound*, FMOD_OK
-                            (0x1b2944, sound_stub.to_vec()),
+                            // FMOD::System::createSound is hooked as a host
+                            // function in jc3_audio (install_audio_hooks) so it
+                            // can map each sound handle to its wav for OpenAL
+                            // playback — do NOT stub it here.
                             // FMOD::System::createStream -> dummy Sound*, FMOD_OK
+                            // (music is handled by the playMusic hook; this keeps
+                            // the game's non-null-Sound code path happy).
                             (0x1b28f8, sound_stub.to_vec()),
                             // -[JellyCar3ViewController messageRx:] news-ticker handler
                             // (msg 0x2b): `count = [[self tickerStrings] count]` then
@@ -573,17 +577,6 @@ impl Environment {
                             // offline): patch the `[… count]` msgSend @ 0xbf0fc to
                             // `movs r0,#0; nop`.
                             (0xbf0fc, vec![0x2000, 0xbf00]),
-                            // -[DMOUser _canNetwork] @ 0x2a7b50: on level complete
-                            // JC3 submits the score to Disney Mobile Online and shows
-                            // "saving data, please wait" until the HTTP delegate
-                            // (httpRequestDidFinishLoading:/didFailWithError:) calls
-                            // submitScoreCallDidComplete:. touchHLE has no CFNetwork,
-                            // so the request never completes and the overlay hangs
-                            // forever. _canNetwork wrongly reports "online" here;
-                            // force it to 0 so submitScore takes its built-in OFFLINE
-                            // branch (queues the score, no server wait) and the game
-                            // returns to the menu. `movs r0,#0; bx lr`.
-                            (0x2a7b50, vec![0x2000, 0x4770]),
                         ];
                         for (addr, hws) in stubs.iter() {
                             for (i, &hw) in hws.iter().enumerate() {
@@ -600,7 +593,7 @@ impl Environment {
 
                         // Play JC3's background music through OpenAL by hooking
                         // SoundManager::playMusic. (FMOD stays stubbed/silent.)
-                        crate::frameworks::jc3_audio::install_music_hook(env);
+                        crate::frameworks::jc3_audio::install_audio_hooks(env);
                     }
 
                     // Some apps use the stack inside the static initializer.
@@ -1812,27 +1805,6 @@ impl Environment {
                     ThreadNextAction::ReturnToHost => return,
                     ThreadNextAction::DebugCpuError(e) => {
                         self.debug_cpu_error(e);
-                    }
-                }
-
-                // [jc3-diag] When null-page reads flood (a guest loop polling a
-                // faked/nil object — e.g. the JC3 level-complete "saving" hang),
-                // dump the guest PC + backtrace exactly once so we can see which
-                // function/object is stuck. Cheap load per instruction; disabled
-                // after the single dump.
-                {
-                    use std::sync::atomic::{AtomicBool, Ordering};
-                    static DUMPED: AtomicBool = AtomicBool::new(false);
-                    if !DUMPED.load(Ordering::Relaxed)
-                        && crate::mem::NULL_READ_COUNT.load(Ordering::Relaxed) > 5000
-                    {
-                        DUMPED.store(true, Ordering::Relaxed);
-                        log!(
-                            "[jc3-diag] null-page-read flood — guest PC = {:#x}, LR = {:#x}; backtrace:",
-                            self.cpu.regs()[cpu::Cpu::PC],
-                            self.cpu.regs()[cpu::Cpu::LR]
-                        );
-                        self.stack_trace_current();
                     }
                 }
 

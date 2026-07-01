@@ -35,12 +35,6 @@ pub static JC3_WATCH_ADDR: std::sync::atomic::AtomicU32 = std::sync::atomic::Ato
 pub static JC3_DIRECT_EAGL_PRESENT: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
-/// [jc3-diag] Count of null-page reads (faked/nil object dereferences). Used by
-/// the run loop to dump a one-time guest backtrace when it floods — locates the
-/// code stuck polling a faked object (e.g. the JC3 level-complete "saving" loop).
-pub static NULL_READ_COUNT: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
-
 /// Equivalent of `usize` for guest memory.
 pub type GuestUSize = u32;
 
@@ -373,7 +367,6 @@ impl Mem {
     // seems like a good idea to help the compiler optimise for the fast path
     #[cold]
     fn null_check_fail(at: VAddr, size: GuestUSize) {
-        NULL_READ_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // On real iOS, null-page access is a hardware SIGSEGV (instant death).
         // In the emulator, it's usually caused by our own leniency (faked
         // classes returning `self`, no-op'd functions returning 0/1 that get
