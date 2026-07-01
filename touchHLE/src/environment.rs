@@ -587,9 +587,10 @@ impl Environment {
                             d
                         );
 
-                        // Audio bridge: replace SoundManager::playMusic and
-                        // playSoundFromGroup with host shims that play through
-                        // OpenAL. (FMOD stays stubbed.)
+                        // Audio bridge: route JC3 audio (music + all SFX)
+                        // through OpenAL. Installs AFTER the FMOD stubs above so
+                        // our createSound/createStream hooks override the
+                        // fixed-dummy stubs (needed to tell sounds apart).
                         crate::frameworks::jc3_audio::install_audio_hooks(env);
                     }
 
