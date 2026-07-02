@@ -157,6 +157,20 @@ fn jc3_create_impl(env: &mut Environment, is_stream: bool) {
     };
     let loop_flag = (mode & FMOD_LOOP_BITS) != 0;
 
+    // Always log the call itself (even when name is empty / FMOD_OPENMEMORY), so we
+    // can tell "createSound never called" apart from "called with no filename".
+    log!(
+        "JC3 audio: {} called (name_ptr={:#x} mode={:#x} name={:?})",
+        if is_stream {
+            "createStream"
+        } else {
+            "createSound"
+        },
+        name_ptr,
+        mode,
+        name
+    );
+
     // Allocate a unique zeroed handle (0x400 like the old shared dummy Sound, so
     // the game's occasional field reads on the Sound* stay safe).
     let handle = env.mem.alloc(0x400);
