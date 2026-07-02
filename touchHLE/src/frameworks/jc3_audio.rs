@@ -25,12 +25,20 @@ use crate::dyld::HostFunction;
 use crate::fs::GuestPathBuf;
 use crate::mem::{ConstPtr, MutPtr, Ptr};
 use crate::Environment;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 const PLAY_MUSIC_ADDR: u32 = 0x101aac;
 const CREATE_SOUND_ADDR: u32 = 0x1b2944;
+// FMOD::System::createStream — same signature as createSound. The JC3 init block
+// in environment.rs writes a "dummy Sound*" stub here; we override it at runtime
+// (install_audio_hooks runs *after* that block) with a real host hook so streamed
+// sounds ALSO get registered in SOUND_MAP and can play through OpenAL. This is the
+// fix for in-level audio: JC3 loads short menu blips via createSound but level /
+// gameplay cues (and looping engine/tire/etc.) via createStream, which the dummy
+// stub left unmapped -> SoundEffectInstance::play missed them -> silence.
+const CREATE_STREAM_ADDR: u32 = 0x1b28f8;
 const SEI_PLAY_ADDR: u32 = 0xfbde8; // SoundEffectInstance::play(float)
 const SEI_STOP_ADDR: u32 = 0xfa59c; // SoundEffectInstance::stop()
 
@@ -52,12 +60,18 @@ static CUR_TRACK: AtomicI32 = AtomicI32::new(-1);
 static SOUND_MAP: OnceLock<Mutex<HashMap<u32, (String, bool)>>> = OnceLock::new();
 /// SoundEffectInstance* -> (AL source, AL buffer, sound handle currently playing).
 static INSTANCE_SRC: OnceLock<Mutex<HashMap<u32, (ALuint, ALuint, u32)>>> = OnceLock::new();
+/// Diagnostic: SEI::play handles already reported as "not in sound_map", so we
+/// log each miss once instead of every frame.
+static LOGGED_MISS: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
 
 fn sound_map() -> &'static Mutex<HashMap<u32, (String, bool)>> {
     SOUND_MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 fn instance_src() -> &'static Mutex<HashMap<u32, (ALuint, ALuint, u32)>> {
     INSTANCE_SRC.get_or_init(|| Mutex::new(HashMap::new()))
+}
+fn logged_miss() -> &'static Mutex<HashSet<u32>> {
+    LOGGED_MISS.get_or_init(|| Mutex::new(HashSet::new()))
 }
 
 /// Install the JC3 audio hooks. Call once, only for `com.disney.JellyCar3`.
@@ -67,6 +81,17 @@ pub fn install_audio_hooks(env: &mut Environment) {
 
     let create: HostFunction = &(jc3_fmod_create_sound as fn(&mut Environment));
     patch_thumb_hook(env, CREATE_SOUND_ADDR, "__touchHLE_JC3CreateSound", create);
+
+    // Override the environment.rs "dummy Sound*" stub at createStream with a real
+    // host hook (same handler as createSound) so streamed level sounds register in
+    // SOUND_MAP too. Runs after the JC3 init block, so this write wins.
+    let create_stream: HostFunction = &(jc3_fmod_create_stream as fn(&mut Environment));
+    patch_thumb_hook(
+        env,
+        CREATE_STREAM_ADDR,
+        "__touchHLE_JC3CreateStream",
+        create_stream,
+    );
 
     let play: HostFunction = &(jc3_sei_play as fn(&mut Environment));
     patch_thumb_hook(env, SEI_PLAY_ADDR, "__touchHLE_JC3SeiPlay", play);
@@ -111,6 +136,17 @@ fn patch_thumb_hook(env: &mut Environment, addr: u32, symbol: &'static str, hf: 
 /// zeroed handle (deref-safe, like the old dummy Sound) and remember which wav
 /// it is, so playback can find the file later. Returns FMOD_OK.
 fn jc3_fmod_create_sound(env: &mut Environment) {
+    jc3_create_impl(env, false)
+}
+
+/// `FMOD::System::createStream(...)` — identical FMOD signature to createSound.
+/// Routed through the same handler so streamed level sounds also register in
+/// SOUND_MAP (see CREATE_STREAM_ADDR note above).
+fn jc3_fmod_create_stream(env: &mut Environment) {
+    jc3_create_impl(env, true)
+}
+
+fn jc3_create_impl(env: &mut Environment, is_stream: bool) {
     let name_ptr = env.cpu.regs()[1];
     let mode = env.cpu.regs()[2];
     let sp = env.cpu.regs()[Cpu::SP];
@@ -131,7 +167,22 @@ fn jc3_fmod_create_sound(env: &mut Environment) {
     }
 
     if !name.is_empty() {
-        sound_map().lock().unwrap().insert(hbits, (name, loop_flag));
+        sound_map()
+            .lock()
+            .unwrap()
+            .insert(hbits, (name.clone(), loop_flag));
+        // Diagnostic (creates happen at load, not per-frame — safe to log each).
+        log!(
+            "JC3 audio: {} registered handle {:#x} -> {:?} (loop={})",
+            if is_stream {
+                "createStream"
+            } else {
+                "createSound"
+            },
+            hbits,
+            name,
+            loop_flag
+        );
     }
 
     // Write handle to *sound (the 5th arg, a Sound** on the stack).
@@ -159,6 +210,17 @@ fn jc3_sei_play(env: &mut Environment) {
     let handle: u32 = env.mem.read(ConstPtr::<u32>::from_bits(this + 4));
     let entry = sound_map().lock().unwrap().get(&handle).cloned();
     let Some((name, loop_flag)) = entry else {
+        // Diagnostic: a SoundEffectInstance whose FMOD::Sound* we never registered.
+        // Log once per handle so we can see (in a level) whether sounds are being
+        // created through a path we don't hook. Should be rare now that both
+        // createSound and createStream are mapped.
+        if logged_miss().lock().unwrap().insert(handle) {
+            log!(
+                "JC3 SFX: SEI::play inst {:#x} handle {:#x} not in sound_map (miss)",
+                this,
+                handle
+            );
+        }
         return; // not a sound we created — leave it alone
     };
 
